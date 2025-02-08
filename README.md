@@ -1,6 +1,6 @@
 # OceanBase AI Workshop
 
-[中文版](./README_zh.md)
+English | [中文版](./README_zh.md)
 
 ## Introduction
 

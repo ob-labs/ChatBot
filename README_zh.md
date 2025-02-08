@@ -1,18 +1,18 @@
 # OceanBase AI 动手实战营
 
-[英文版](./README.md)
+[English](./README.md) | 中文版
 
 ## 项目介绍
 
-在这个动手实战营中，我们会构建一个 RAG 聊天机器人，用来回答与 OceanBase 文档相关的问题。它将采用开源的 OceanBase 文档仓库作为多模数据源，把文档转换为向量和结构化数据存储在 OceanBase 中。用户提问时，该机器人将用户的问题同样转换为向量之后在数据库中进行向量检索，结合向量检索得到的文档内容，借助通义千问提供的大语言模型能力来为用户提供更加准确的回答。
+在这个动手实战营中，我们会构建一个 RAG 聊天机器人，用来回答与 OceanBase 文档相关的问题。它将采用开源的 OceanBase 文档仓库作为多模数据源，把文档转换为向量和结构化数据存储在 OceanBase 中。用户提问时，该机器人将用户的问题同样转换为向量之后在数据库中进行向量检索，结合向量检索得到的文档内容，借助 DeepSeek 的大语言模型能力来为用户提供更加准确的回答。其中 BGE-M3 文本嵌入模型和 DeepSeek 大语言模型使用的是[硅基流动](https://cloud.siliconflow.cn/)提供的 API 服务。
 
 ### 项目组成
 
 该机器人将由以下几个组件组成：
 
-1. 将文档转换为向量的文本嵌入服务，在这里我们使用通义千问的嵌入 API
+1. 将文档转换为向量的文本嵌入服务，在这里我们使用 BGE-M3 模型
 2. 提供存储和查询文档向量和其他结构化数据能力的数据库，我们使用 OceanBase 4.3.3 版本
-3. 若干分析用户问题、基于检索到的文档和用户问题生成回答的 LLM 智能体，利用通义千问的大模型能力构建
+3. 若干分析用户问题、基于检索到的文档和用户问题生成回答的 LLM 智能体，利用 DeepSeek 大语言模型能力进行构建
 4. 机器人与用户交互的聊天界面，采用 Streamlit 搭建
 
 ### 交互流程
@@ -39,9 +39,9 @@
 - 可以用数学方法(如余弦相似度)计算向量之间的相似度
 - 常见的文本嵌入模型包括 Word2Vec、BERT、BGE 等
 
-在本项目中，我们使用通义千问的文本嵌入模型来生成文档的向量表示，这些向量将被存储在 OceanBase 数据库中用于后续的相似度检索。
+在本项目中，我们使用智源研究院的 BGE-M3 文本嵌入模型来生成文档的向量表示，这些向量将被存储在 OceanBase 数据库中用于后续的相似度检索。
 
-例如使用嵌入模型将“苹果”、“香蕉”和“橘子”分别转换为 4 维的向量，它们的向量表示可能如下图所示，需要注意的是我们为了方便表示，将向量的维度降低到了 4 维，实际上文本嵌入产生的向量维数通常是几百或者几千维，例如我们使用的通义千问 text-embedding-v3 产生的向量维度是 1024 维。
+例如使用嵌入模型将“苹果”、“香蕉”和“橘子”分别转换为 4 维的向量，它们的向量表示可能如下图所示，需要注意的是我们为了方便表示，将向量的维度降低到了 4 维，实际上文本嵌入产生的向量维数通常是几百或者几千维，例如我们使用的 BGE-M3 产生的向量维度是 1024 维。
 
 ![Embedding Example](./demo/embedding-example.png)
 
@@ -100,15 +100,11 @@ RAG 的主要优势有：
 
 5. 确保您机器上该项目的代码是最新的状态，建议进入项目目录执行 `git pull`
 
-6. 注册[阿里云百炼](https://bailian.console.aliyun.com/)账号，开通模型服务并获取 API Key
+6. 注册[硅基流动](https://cloud.siliconflow.cn/)账号并获取 API Key
 
-![点击开通模型服务](./demo/activate-models.png)
+![硅基流动](./demo/dashboard.png)
 
-![确认开通模型服务](./demo/confirm-to-activate-models.png)
-
-![阿里云百炼](./demo/dashboard.png)
-
-![获取阿里云百炼 API Key](./demo/get-api-key.png)
+![获取硅基流动 API Key](./demo/get-api-key.png)
 
 ## 构建聊天机器人
 
@@ -116,108 +112,24 @@ RAG 的主要优势有：
 
 我们首先要获取 OceanBase 4.3.3 版本及以上的数据库来存储我们的向量数据。您可以通过以下两种方式获取 OceanBase 数据库：
 
-1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)；（推荐）
-2. 使用 Docker 启动单机版 OceanBase 数据库。（备选，需要有 Docker 环境，消耗较多本地资源）
+1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)；（推荐，本文档选用该方式）
+2. 使用 Docker 启动单机版 OceanBase 数据库。（备选，需要有 Docker 环境，消耗较多本地资源，请参见[附录](#1-使用-docker-启动单机版-oceanbase-数据库)）
 
-#### 1.1 使用 OB Cloud 云数据库免费试用版
-
-##### 注册并开通实例
+#### 注册 OBCloud 并开通实例
 
 进入[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)页面，点击“立即试用”按钮，注册并登录账号，填写相关信息，开通实例，等待创建完成。
 
-##### 获取数据库实例连接串
+#### 获取 OBCloud 数据库实例连接串
 
 进入实例详情页的“实例工作台”，点击“连接”-“获取连接串”按钮来获取数据库连接串，将其中的连接信息填入后续步骤中创建的 .env 文件内。
 
 ![获取数据库连接串](./demo/obcloud-get-connection.png)
 
-##### 修改参数启用向量模块
+#### 修改实例参数启用向量模块
 
 进入实例详情页的“参数管理”，将 `ob_vector_memory_limit_percentage` 参数修改为 30 以启动向量模块。
 
 ![修改参数以启用向量功能](./demo/obcloud-modify-param.png)
-
-#### 1.2 使用 Docker 启动单机版 OceanBase 数据库
-
-##### 启动 OceanBase 容器
-
-如果你是第一次登录动手实战营提供的机器，你需要通过以下命令启动 Docker 服务：
-
-```bash
-systemctl start docker
-```
-
-随后您可以使用以下命令启动一个 OceanBase docker 容器：
-
-```bash
-docker run --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -e OB_SERVER_IP=127.0.0.1 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
-```
-
-如果上述命令执行成功，将会打印容器 ID，如下所示：
-
-```bash
-af5b32e79dc2a862b5574d05a18c1b240dc5923f04435a0e0ec41d70d91a20ee
-```
-
-##### 检查 OceanBase 数据库初始化是否完成
-
-容器启动后，您可以使用以下命令检查 OceanBase 数据库初始化状态：
-
-```bash
-docker logs -f ob433
-```
-
-初始化过程大约需要 2 ~ 3 分钟。当您看到以下消息（底部的 `boot success!` 是必须的）时，说明 OceanBase 数据库初始化完成：
-
-```bash
-cluster scenario: express_oltp
-Start observer ok
-observer program health check ok
-Connect to observer ok
-Initialize oceanbase-ce ok
-Wait for observer init ok
-+----------------------------------------------+
-|                 oceanbase-ce                 |
-+------------+---------+------+-------+--------+
-| ip         | version | port | zone  | status |
-+------------+---------+------+-------+--------+
-| 172.17.0.2 | 4.3.3.1 | 2881 | zone1 | ACTIVE |
-+------------+---------+------+-------+--------+
-obclient -h172.17.0.2 -P2881 -uroot -Doceanbase -A
-
-cluster unique id: c17ea619-5a3e-5656-be07-00022aa5b154-19298807cfb-00030304
-
-obcluster running
-
-...
-
-check tenant connectable
-tenant is connectable
-boot success!
-```
-
-使用 `Ctrl + C` 退出日志查看界面。
-
-##### 测试数据库部署情况（可选）
-
-可以使用 mysql 客户端连接到 OceanBase 集群，检查数据库部署情况。
-
-```bash
-mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
-```
-
-如果部署成功，您将看到以下输出：
-
-```bash
-+--------------------+
-| Database           |
-+--------------------+
-| information_schema |
-| mysql              |
-| oceanbase          |
-| test               |
-+--------------------+
-```
 
 ### 2. 安装依赖
 
@@ -251,12 +163,13 @@ cp .env.example .env
 vi .env
 ```
 
-`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用通义千问提供的 LLM 能力），您需要把 `API_KEY` 和 `OPENAI_EMBEDDING_API_KEY` 更新为您从阿里云百炼控制台获取的 API KEY 值，如果您使用 OB Cloud 的数据库实例，请将 `DB_` 开头的变量更新为您的数据库连接信息，然后保存文件。
+`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用 DeepSeek 作为大语言模型），您需要把 `API_KEY` 和 `OPENAI_EMBEDDING_API_KEY` 更新为您从硅基流动平台上获取到的 API KEY 值，如果您使用 OB Cloud 的数据库实例，请将 `DB_` 开头的变量更新为您的数据库连接信息，然后保存文件。
 
 ```bash
-API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # 填写 API Key
-LLM_MODEL="qwen-turbo-2024-11-01"
-LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+# 请填写获取到的 API_KEY
+API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LLM_MODEL="deepseek-ai/DeepSeek-V3"
+LLM_BASE_URL="https://api.siliconflow.cn/v1"
 
 HF_ENDPOINT=https://hf-mirror.com
 BGE_MODEL_PATH=BAAI/bge-m3
@@ -264,13 +177,14 @@ BGE_MODEL_PATH=BAAI/bge-m3
 OLLAMA_URL=
 OLLAMA_TOKEN=
 
-OPENAI_EMBEDDING_API_KEY= # 填写 API Key
-OPENAI_EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-OPENAI_EMBEDDING_MODEL=text-embedding-v3
+# OPENAI_EMBEDDING_API_KEY 一项请填写和 API_KEY 一样的值
+OPENAI_EMBEDDING_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_EMBEDDING_BASE_URL="https://api.siliconflow.cn/v1/embeddings"
+OPENAI_EMBEDDING_MODEL=BAAI/bge-m3
 
 UI_LANG="zh"
 
-# 如果你使用的是 OB Cloud 的实例，请根据实例的连接信息更新下面的变量
+# 请根据 OBCloud 实例的连接信息更新下面的变量
 DB_HOST="127.0.0.1"
 DB_PORT="2881"
 DB_USER="root@test"
@@ -408,7 +322,7 @@ poetry run streamlit run --server.runOnSave false chat_ui.py
 
 ### 1. 如何更改用于生成回答的 LLM 模型？
 
-您可以通过更新 `.env` 文件中的 `LLM_MODEL` 环境变量来更改 LLM 模型，或者是在启动的对话界面左侧修改“大语言模型”。默认值是 `qwen-turbo-2024-11-01`，这是通义千问近期推出的具有较高免费额度的模型。还有其他可用的模型，如 `qwen-plus`、`qwen-max`、`qwen-long` 等。您可以在[阿里云百炼网站](https://bailian.console.aliyun.com/)的模型广场中找到完整的可用模型列表。请注意免费额度及计费标准。
+您可以通过更新 `.env` 文件中的 `LLM_MODEL` 环境变量来更改 LLM 模型，或者是在启动的对话界面左侧修改“大语言模型”。默认值是 `deepseek-ai/DeepSeek-V3`，硅基流动上还有其他可用的模型，如 `deepseek-ai/DeepSeek-R1`、`Qwen/Qwen2.5-72B-Instruct`、`meta-llama/Llama-3.3-70B-Instruct` 等。您可以在[硅基流动](https://cloud.siliconflow.cn/)的模型广场中找到完整的可用模型列表。请注意免费额度及计费标准。
 
 ### 2. 是否可以在初始加载后更新文档数据？
 
@@ -464,3 +378,87 @@ ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false 
 ### 5. 如何更改聊天界面的语言？
 
 你可以通过更新 `.env` 文件中的 `UI_LANG` 环境变量来更改聊天界面的语言。默认值是 `zh`，表示中文。你可以将其更改为 `en` 来切换到英文。更新完成后需要重启服务才能生效。
+
+## 附录
+
+### 1. 使用 Docker 启动单机版 OceanBase 数据库
+
+#### 启动 OceanBase 容器
+
+如果你是第一次登录动手实战营提供的机器，你需要通过以下命令启动 Docker 服务：
+
+```bash
+systemctl start docker
+```
+
+随后您可以使用以下命令启动一个 OceanBase docker 容器：
+
+```bash
+docker run --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -e OB_SERVER_IP=127.0.0.1 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
+```
+
+如果上述命令执行成功，将会打印容器 ID，如下所示：
+
+```bash
+af5b32e79dc2a862b5574d05a18c1b240dc5923f04435a0e0ec41d70d91a20ee
+```
+
+#### 检查 OceanBase 数据库初始化是否完成
+
+容器启动后，您可以使用以下命令检查 OceanBase 数据库初始化状态：
+
+```bash
+docker logs -f ob433
+```
+
+初始化过程大约需要 2 ~ 3 分钟。当您看到以下消息（底部的 `boot success!` 是必须的）时，说明 OceanBase 数据库初始化完成：
+
+```bash
+cluster scenario: express_oltp
+Start observer ok
+observer program health check ok
+Connect to observer ok
+Initialize oceanbase-ce ok
+Wait for observer init ok
++----------------------------------------------+
+|                 oceanbase-ce                 |
++------------+---------+------+-------+--------+
+| ip         | version | port | zone  | status |
++------------+---------+------+-------+--------+
+| 172.17.0.2 | 4.3.3.1 | 2881 | zone1 | ACTIVE |
++------------+---------+------+-------+--------+
+obclient -h172.17.0.2 -P2881 -uroot -Doceanbase -A
+
+cluster unique id: c17ea619-5a3e-5656-be07-00022aa5b154-19298807cfb-00030304
+
+obcluster running
+
+...
+
+check tenant connectable
+tenant is connectable
+boot success!
+```
+
+使用 `Ctrl + C` 退出日志查看界面。
+
+#### 测试数据库部署情况（可选）
+
+可以使用 mysql 客户端连接到 OceanBase 集群，检查数据库部署情况。
+
+```bash
+mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
+```
+
+如果部署成功，您将看到以下输出：
+
+```bash
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| oceanbase          |
+| test               |
++--------------------+
+```
