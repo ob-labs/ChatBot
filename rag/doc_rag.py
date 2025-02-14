@@ -36,6 +36,7 @@ vs = OceanbaseVectorStore(
     metadata_field="metadata",
     extra_columns=[Column("component_code", Integer, primary_key=True)],
     echo=os.getenv("ECHO") == "true",
+    pool_recycle=7200,
 )
 
 doc_cite_pattern = r"(\[+\@(\d+)\]+)"
