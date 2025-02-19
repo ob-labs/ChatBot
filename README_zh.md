@@ -112,12 +112,12 @@ RAG 的主要优势有：
 
 我们首先要获取 OceanBase 4.3.3 版本及以上的数据库来存储我们的向量数据。您可以通过以下两种方式获取 OceanBase 数据库：
 
-1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)；（推荐，本文档选用该方式）
+1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial?utm_source=ai)；（推荐，本文档选用该方式）
 2. 使用 Docker 启动单机版 OceanBase 数据库。（备选，需要有 Docker 环境，消耗较多本地资源，请参见[附录](#1-使用-docker-启动单机版-oceanbase-数据库)）
 
 #### 注册 OBCloud 并开通实例
 
-进入[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)页面，点击“立即试用”按钮，注册并登录账号，填写相关信息，开通实例，等待创建完成。
+进入[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial?utm_source=ai)页面，点击“立即试用”按钮，注册并登录账号，填写相关信息，开通实例，等待创建完成。
 
 #### 获取 OBCloud 数据库实例连接串
 
