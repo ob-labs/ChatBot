@@ -24,6 +24,6 @@
 2.6 在github 上   让 {local_code_url}  {up_stream} 分支 和 {up_code_url}的 {up_stream}分支 保持完全的同步状态. 
 2.6.1 即 同步 {up_code_url} 的 {up_stream} 分支到 {local_code_url} 的 {up_stream} 分支.
 2.7 git checkout 到{up_stream} 分支  
-2.8 删除{local_code_rul} 的issue_{id} 分支  
+2.8 删除{local_code_rul} 的issue_{id} 分支, 本地及远程分支都删除.
 2.9 git pull {up_stream} 分支到最新的状态
 3. 所有的操作, 都是英文, 无中文

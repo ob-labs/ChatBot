@@ -8,9 +8,9 @@ cd "$(dirname "$0")/.."
 UI_TYPE=${1:-chat}
 
 if [ "$UI_TYPE" = "chat" ]; then
-    streamlit run src/frontend/chat_ui.py
+    uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 elif [ "$UI_TYPE" = "flow" ]; then
-    streamlit run src/frontend/flow_ui.py
+    uv run streamlit run --server.runOnSave false src/frontend/flow_ui.py
 else
     echo "Unknown UI type: $UI_TYPE"
     echo "Usage: ./scripts/start.sh [chat|flow]"
