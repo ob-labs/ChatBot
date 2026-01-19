@@ -2,20 +2,20 @@ import re
 import os
 import time
 
-from i18n import t
+from src.frontend.i18n import t
 from typing import Iterator, Optional, Union
 from langchain_core.messages import AIMessageChunk
-from rag.embeddings import get_embedding
-from rag.documents import Document, DocumentMeta, component_mapping as cm
-from agents.base import AgentBase
-from agents.rag_agent import prompt as rag_prompt, prompt_en as rag_prompt_en
-from agents.universe_rag_agent import (
+from src.rag.embeddings import get_embedding
+from src.rag.documents import Document, DocumentMeta, component_mapping as cm
+from src.agents.base import AgentBase
+from src.agents.rag_agent import prompt as rag_prompt, prompt_en as rag_prompt_en
+from src.agents.universe_rag_agent import (
     prompt as universal_rag_prompt,
     prompt_en as universal_rag_prompt_en,
 )
-from agents.intent_guard_agent import prompt as guard_prompt
-from agents.comp_analyzing_agent import prompt as caa_prompt
-from connection import connection_args
+from src.agents.intent_guard_agent import prompt as guard_prompt
+from src.agents.comp_analyzing_agent import prompt as caa_prompt
+from src.common.connection import connection_args
 from sqlalchemy import Column, Integer
 
 from langchain_oceanbase.vectorstores import OceanbaseVectorStore

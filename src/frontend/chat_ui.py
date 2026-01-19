@@ -4,8 +4,8 @@ import dotenv
 dotenv.load_dotenv()
 
 from typing import Iterator, Union
-from rag.doc_rag import doc_rag_stream
-from i18n import t
+from src.rag.doc_rag import doc_rag_stream
+from src.frontend.i18n import t
 
 import streamlit as st
 from langchain_core.messages import BaseMessageChunk

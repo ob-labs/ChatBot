@@ -7,12 +7,12 @@ dotenv.load_dotenv()
 
 from langchain_oceanbase.vectorstores import OceanbaseVectorStore
 from langchain_core.documents import Document
-from rag.embeddings import get_embedding
-from rag.documents import MarkdownDocumentsLoader, component_mapping as cm
+from src.rag.embeddings import get_embedding
+from src.rag.documents import MarkdownDocumentsLoader, component_mapping as cm
 from pyobvector import ObListPartition, RangeListPartInfo
 from sqlalchemy import Column, Integer
 
-from connection import connection_args
+from src.common.connection import connection_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
