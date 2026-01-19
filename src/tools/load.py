@@ -36,17 +36,18 @@ parser.add_argument(
 args = parser.parse_args()
 print("args", args)
 
-from pyobvector import MilvusLikeClient
+import pyseekdb
 
-client = MilvusLikeClient(
-    uri=f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}",
+client = pyseekdb.Client(
+    host=os.getenv("DB_HOST"),
+    port=int(os.getenv("DB_PORT", "2881")),
+    database=os.getenv("DB_NAME"),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASSWORD"),
-    db_name=os.getenv("DB_NAME"),
 )
 
 vals = []
-params = client.perform_raw_text_sql(
+params = client.execute(
     "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
 )
 for row in params:
@@ -57,16 +58,16 @@ if len(vals) == 0:
     exit(1)
 if any(val == 0 for val in vals):
     try:
-        client.perform_raw_text_sql(
+        client.execute(
             "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
         )
     except Exception as e:
         print("Failed to set ob_vector_memory_limit_percentage to 30.")
         print("Error message:", e)
         exit(1)
-client.perform_raw_text_sql("SET ob_query_timeout=100000000")
+client.execute("SET ob_query_timeout=100000000")
 
-table_exist = client.check_table_exists(args.table_name)
+table_exist = client.has_collection(args.table_name)
 
 if table_exist and not args.skip_create:
     print(f"Table {args.table_name} already exists.")
@@ -96,12 +97,44 @@ elif not args.skip_create:
     partition `p10` values in (DEFAULT));
     """
 
-    client.perform_raw_text_sql(create_table_sql)
+    client.execute(create_table_sql)
 
 with open(args.source_file, "r") as f:
     values = json.load(f)
     progress = tqdm(total=len(values))
     for i in range(0, len(values), args.insert_batch):
         batch = values[i : i + args.insert_batch]
-        client.insert(args.table_name, batch)
+        # Use SQL INSERT with proper escaping
+        for item in batch:
+            id_val = item.get("id", "")
+            embedding_val = json.dumps(item.get("embedding", []))
+            document_val = json.dumps(item.get("document", ""))  # Escape as JSON string
+            metadata_val = json.dumps(item.get("metadata", {}))
+            component_code_val = item.get("component_code", 0)
+            # Use JSON functions for safe insertion
+            insert_sql = f"""
+            INSERT INTO `{args.table_name}` (`id`, `embedding`, `document`, `metadata`, `component_code`)
+            VALUES (
+                {json.dumps(id_val)},
+                CAST({json.dumps(embedding_val)} AS VECTOR(1024)),
+                {json.dumps(item.get("document", ""))},
+                CAST({json.dumps(metadata_val)} AS JSON),
+                {component_code_val}
+            )
+            """
+            try:
+                client.execute(insert_sql)
+            except Exception as e:
+                # Fallback to simpler insert if CAST fails
+                insert_sql = f"""
+                INSERT INTO `{args.table_name}` (`id`, `embedding`, `document`, `metadata`, `component_code`)
+                VALUES (
+                    {json.dumps(id_val)},
+                    {json.dumps(embedding_val)},
+                    {json.dumps(item.get("document", ""))},
+                    {json.dumps(metadata_val)},
+                    {component_code_val}
+                )
+                """
+                client.execute(insert_sql)
         progress.update(len(batch))
