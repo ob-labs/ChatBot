@@ -35,13 +35,14 @@ parser.add_argument(
 args = parser.parse_args()
 print("args", args)
 
-from pyobvector import MilvusLikeClient
+import pyseekdb
 
-client = MilvusLikeClient(
-    uri=f"{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}",
+client = pyseekdb.Client(
+    host=os.getenv("DB_HOST"),
+    port=int(os.getenv("DB_PORT", "2881")),
+    database=os.getenv("DB_NAME"),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASSWORD"),
-    db_name=os.getenv("DB_NAME"),
 )
 
 output_fields = ["id", "embedding", "document", "metadata", "component_code"]
@@ -51,23 +52,24 @@ batch_size = min(args.batch_size, args.total) if args.total > 0 else args.batch_
 current_count = args.batch_size
 output_file = args.output_file
 
-cur = client.perform_raw_text_sql(f"SELECT COUNT(*) FROM {args.table_name}")
-count = cur.fetchone()[0]
+count_result = client.execute(f"SELECT COUNT(*) as cnt FROM {args.table_name}")
+count = count_result[0][0] if count_result else 0
 progress = tqdm(total=count)
 
 values = []
 while current_count == batch_size:
-    cur = client.perform_raw_text_sql(
-        f"SELECT {' ,'.join(output_fields)} FROM {args.table_name} LIMIT {batch_size} OFFSET {offset} "
+    rows = client.execute(
+        f"SELECT {', '.join(output_fields)} FROM {args.table_name} LIMIT {batch_size} OFFSET {offset} "
     )
-    current_count = cur.rowcount
-    for id, embedding, document, metadata, comp_code in cur:
+    current_count = len(rows)
+    for row in rows:
+        id, embedding, document, metadata, comp_code = row
         values.append(
             {
                 "id": id,
-                "embedding": json.loads(embedding.decode()),
+                "embedding": json.loads(embedding.decode()) if isinstance(embedding, bytes) else embedding,
                 "document": document,
-                "metadata": json.loads(metadata),
+                "metadata": json.loads(metadata) if isinstance(metadata, str) else metadata,
                 "component_code": comp_code,
             }
         )

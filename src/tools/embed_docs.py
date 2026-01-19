@@ -11,6 +11,7 @@ from src.rag.embeddings import get_embedding
 from src.rag.documents import MarkdownDocumentsLoader, component_mapping as cm
 from pyobvector import ObListPartition, RangeListPartInfo
 from sqlalchemy import Column, Integer
+import pyseekdb
 
 from src.common.connection import connection_args
 
@@ -83,8 +84,17 @@ vs = OceanbaseVectorStore(
     echo=args.echo,
 )
 
+# Use pyseekdb client for SQL operations
+sql_client = pyseekdb.Client(
+    host=connection_args["host"],
+    port=int(connection_args.get("port", "2881")),
+    database=connection_args["db_name"],
+    user=connection_args["user"],
+    password=connection_args["password"],
+)
+
 vals = []
-params = vs.obvector.perform_raw_text_sql(
+params = sql_client.execute(
     "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
 )
 for row in params:
@@ -95,14 +105,14 @@ if len(vals) == 0:
     exit(1)
 if any(val == 0 for val in vals):
     try:
-        vs.obvector.perform_raw_text_sql(
+        sql_client.execute(
             "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
         )
     except Exception as e:
         print("Failed to set ob_vector_memory_limit_percentage to 30.")
         print("Error message:", e)
         exit(1)
-vs.obvector.perform_raw_text_sql("SET ob_query_timeout=100000000")
+sql_client.execute("SET ob_query_timeout=100000000")
 
 
 def insert_batch(docs: list[Document], comp: str = "observer"):
