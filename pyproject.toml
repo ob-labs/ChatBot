@@ -16,6 +16,8 @@ dependencies = [
     "langchain-openai>=0.2.0",
     "streamlit>=1.38.0",
     "pyobvector>=0.1.14",
+    "flagembedding>=1.2.11",
+    "peft>=0.13.1",
     "langchain-oceanbase>=0.2.0",
     "python-dotenv>=1.0.1",
 ]
