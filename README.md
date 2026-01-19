@@ -283,7 +283,7 @@ DB_PASSWORD=""
 You can use our prepared script to try connecting to the database to ensure database-related environment variables are set correctly:
 
 ```bash
-bash utils/connect_db.sh
+bash scripts/connect_db.sh
 # If you successfully enter the MySQL connection, this verifies that the database-related environment variables are set correctly.
 ```
 
@@ -296,9 +296,9 @@ In this step, we will clone the open-source documentation repositories of OceanB
 First, we'll use git to clone the documentation for the oceanbase project locally.
 
 ```bash
-git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git doc_repos/oceanbase-doc
+git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git data/doc_repos/oceanbase-doc
 # If your network is slow when accessing GitHub, you can use the following command to clone the repository from Gitee
-git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git doc_repos/oceanbase-doc
+git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git data/doc_repos/oceanbase-doc
 ```
 
 #### 5.2 Document Format Standardization
@@ -307,21 +307,21 @@ Since some files in OceanBase's open-source documentation use `====` and `----` 
 
 ```bash
 # Convert document headings to standard markdown format
-poetry run python convert_headings.py doc_repos/oceanbase-doc/zh-CN
+poetry run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
 ```
 
 #### 5.3 Convert Documents to Vectors and Insert into OceanBase
 
-We provide the `embed_docs.py` script which, when given a document directory and corresponding component, will traverse all markdown documents in the directory, split long documents into chunks, convert them into vectors using the embedding model, and finally insert the document chunk content, embedded vectors, and chunk metadata (in JSON format, including document title, relative path, component name, chunk title, cascading titles) together into the same table in OceanBase, ready for querying.
+We provide the `src/tools/embed_docs.py` script which, when given a document directory and corresponding component, will traverse all markdown documents in the directory, split long documents into chunks, convert them into vectors using the embedding model, and finally insert the document chunk content, embedded vectors, and chunk metadata (in JSON format, including document title, relative path, component name, chunk title, cascading titles) together into the same table in OceanBase, ready for querying.
 
 In order to save time, we will only process a few documents related to vector retrieval. After opening the chat interface in step 6, the questions you ask about vector retrieval functionality of OceanBase will receive more accurate answers.
 
 ```bash
 # Generate document vectors and metadata
-poetry run python embed_docs.py --doc_base doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
+poetry run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
 ```
 
-While waiting for the text processing, we can examine the contents of `embed_docs.py` to see how it works.
+While waiting for the text processing, we can examine the contents of `src/tools/embed_docs.py` to see how it works.
 
 First, the file instantiates two objects: one is the embedding service `embeddings` responsible for converting text content into vector data; the other is OceanBase's LangChain Vector Store service, which encapsulates pyobvector (OceanBase's vector retrieval SDK) and provides simple, user-friendly interface methods. We've also established partition keys for OceanBase components to greatly improve efficiency when querying documents for specific components.
 
@@ -389,7 +389,11 @@ if args.doc_base is not None:
 Execute the following command to start the chat UI:
 
 ```bash
-poetry run streamlit run --server.runOnSave false chat_ui.py
+# Use the start script
+./scripts/start.sh chat
+
+# Or run directly with poetry
+poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 Visit the URL displayed in the terminal to open the chatbot application UI.
@@ -412,20 +416,20 @@ You can change the LLM model by updating the `LLM_MODEL` environment variable in
 
 ### 2. Can I update document data after initial loading?
 
-Of course. You can insert new document data by running the `embed_docs.py` script. For example:
+Of course. You can insert new document data by running the `src/tools/embed_docs.py` script. For example:
 
 ```bash
 # This will embed all markdown files in the current directory, including README.md and LEGAL.md
-poetry run python embed_docs.py --doc_base .
+poetry run python src/tools/embed_docs.py --doc_base .
 
 # Or you can specify the table to insert data into
-poetry run python embed_docs.py --doc_base . --table_name my_table
+poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
 Then you can specify the `TABLE_NAME` environment variable before launching the chat interface to specify which table the chatbot will query:
 
 ```bash
-TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 3. How to see the SQL statements executed by the database during embedding and retrieval?
@@ -433,7 +437,7 @@ TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
 When inserting documents yourself, you can set the `--echo` flag to see the SQL statements executed by the script:
 
 ```bash
-poetry run python embed_docs.py --doc_base . --table_name my_table --echo
+poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
 ```
 
 You will see output like this:
@@ -454,12 +458,12 @@ CREATE TABLE my_table (
 You can also set `ECHO=true` before launching the chat UI to see the SQL statements executed by the chat UI.
 
 ```bash
-ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 4. Why don't changes to the .env file take effect after starting the UI service?
 
-If you edit the .env file or code files, you need to restart the UI service for the changes to take effect. You can terminate the service with `Ctrl + C`, then run `poetry run streamlit run --server.runOnSave false chat_ui.py` again to restart the service.
+If you edit the .env file or code files, you need to restart the UI service for the changes to take effect. You can terminate the service with `Ctrl + C`, then run `poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py` again to restart the service.
 
 ### 5. How to change the language of the chat UI?
 

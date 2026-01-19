@@ -3,8 +3,8 @@
 .venv
 logs/
 __pycache__
-doc_repos/**
+data/doc_repos/**
 *.db
-uploaded/**
+data/uploaded/**
 !.gitkeep
 .DS_Store

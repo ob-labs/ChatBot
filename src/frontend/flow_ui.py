@@ -15,10 +15,10 @@ dotenv.load_dotenv()
 
 import streamlit as st
 
-from agents.base import AgentBase
-from agents.universe_rag_agent import prompt as universal_rag_prompt
-from rag.documents import parse_md
-from rag.embeddings import OllamaEmbedding
+from src.agents.base import AgentBase
+from src.agents.universe_rag_agent import prompt as universal_rag_prompt
+from src.rag.documents import parse_md
+from src.rag.embeddings import OllamaEmbedding
 
 
 def init_state():
@@ -32,7 +32,7 @@ if "step" not in st.session_state:
 
 
 def save_state():
-    with open("./uploaded/state.json", "w") as f:
+    with open("./data/uploaded/state.json", "w") as f:
         d = {
             "step": st.session_state.step,
             "table": st.session_state.table,
@@ -42,7 +42,7 @@ def save_state():
 
 
 def load_state():
-    if os.path.exists("./uploaded/state.json"):
+    if os.path.exists("./data/uploaded/state.json"):
         with open("./uploaded/state.json", "r") as f:
             d = json.load(f)
             st.session_state.update(d)
@@ -166,10 +166,10 @@ with st.sidebar:
     )
     if st.button("Reset", use_container_width=True):
         init_state()
-        if os.path.exists("./uploaded/state.json"):
-            os.remove("./uploaded/state.json")
-        if os.path.exists("./uploaded/docs"):
-            for root, _, f in os.walk("./uploaded/docs"):
+        if os.path.exists("./data/uploaded/state.json"):
+            os.remove("./data/uploaded/state.json")
+        if os.path.exists("./data/uploaded/docs"):
+            for root, _, f in os.walk("./data/uploaded/docs"):
                 for file in f:
                     os.remove(os.path.join(root, file))
     if st.session_state.get("step", 0) > 0:
@@ -299,9 +299,9 @@ elif st.session_state.step == 2:
         connection_args=c,
         metadata_field="metadata",
     )
-    if not os.path.exists("uploaded/docs"):
-        os.makedirs("uploaded/docs")
-    files = list(filter(lambda x: x.endswith(".md"), os.listdir("uploaded/docs")))
+    if not os.path.exists("data/uploaded/docs"):
+        os.makedirs("data/uploaded/docs")
+    files = list(filter(lambda x: x.endswith(".md"), os.listdir("data/uploaded/docs")))
     if len(files) > 0:
         st.caption(f"Uploaded {len(files)} files")
     col1, col2, col3, col4 = st.columns(4)
@@ -320,7 +320,7 @@ elif st.session_state.step == 2:
         for file in uploaded_file:
             with open(
                 os.path.join(
-                    "uploaded",
+                    "data/uploaded",
                     "docs",
                     file.name,
                 ),
@@ -335,7 +335,7 @@ elif st.session_state.step == 2:
         bar = st.progress(0, text="Processing files")
         for i, file in enumerate(files):
             bar.progress((i + 1) / total, text=f"Processing {file}")
-            for doc in parse_md(os.path.join("uploaded", "docs", file)):
+            for doc in parse_md(os.path.join("data/uploaded", "docs", file)):
                 batch.append(doc)
                 if len(batch) == 10:
                     vs.add_documents(

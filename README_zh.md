@@ -283,7 +283,7 @@ DB_PASSWORD=""
 您可使用我们准备好的脚本来尝试连接数据库，以确保数据库相关的环境变量设置成功：
 
 ```bash
-bash utils/connect_db.sh
+bash scripts/connect_db.sh
 # 如果顺利进入 MySQL 连接当中，则验证了环境变量设置成功
 ```
 
@@ -296,9 +296,9 @@ bash utils/connect_db.sh
 首先我们将使用 git 克隆 oceanbase 的文档到本地。
 
 ```bash
-git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git doc_repos/oceanbase-doc
+git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git data/doc_repos/oceanbase-doc
 # 如果您访问 Github 仓库速度较慢，可以使用以下命令克隆 Gitee 的镜像版本
-git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git doc_repos/oceanbase-doc
+git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git data/doc_repos/oceanbase-doc
 ```
 
 #### 5.2 文档格式标准化
@@ -307,21 +307,21 @@ git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oce
 
 ```bash
 # 把文档的标题转换为标准的 markdown 格式
-poetry run python convert_headings.py doc_repos/oceanbase-doc/zh-CN
+poetry run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
 ```
 
 #### 5.3 将文档转换为向量并插入 OceanBase 数据库
 
-我们提供了 `embed_docs.py` 脚本，通过指定文档目录和对应的组件后，该脚本就会遍历目录中的所有 markdown 格式的文档，将长文档进行切片后使用嵌入模型转换为向量，并最终将文档切片的内容、嵌入的向量和切片的元信息（JSON 格式，包含文档标题、相对路径、组件名称、切片标题、级联标题）一同插入到 OceanBase 的同一张表中，作为预备数据待查。
+我们提供了 `src/tools/embed_docs.py` 脚本，通过指定文档目录和对应的组件后，该脚本就会遍历目录中的所有 markdown 格式的文档，将长文档进行切片后使用嵌入模型转换为向量，并最终将文档切片的内容、嵌入的向量和切片的元信息（JSON 格式，包含文档标题、相对路径、组件名称、切片标题、级联标题）一同插入到 OceanBase 的同一张表中，作为预备数据待查。
 
 为了节省时间，我们只处理 OceanBase 众多文档中与向量检索有关的几篇文档，在第 6 步打开聊天界面之后，您针对 OceanBase 的向量检索功能进行的提问将得到较为准确的回答。
 
 ```bash
 # 生成文档向量和元数据
-poetry run python embed_docs.py --doc_base doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
+poetry run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
 ```
 
-在等待文本处理的过程中我们可以浏览 `embed_docs.py` 的内容，观察它是如何工作的。
+在等待文本处理的过程中我们可以浏览 `src/tools/embed_docs.py` 的内容，观察它是如何工作的。
 
 首先在该文件中实例化了两个对象，一个是负责将文本内容转化为向量数据的嵌入服务 `embeddings`；另一个是 OceanBase 对接的 LangChain Vector Store 服务，封装了 pyobvector 这个 OceanBase 的向量检索 SDK，为用户提供简单易用的接口方法。同时我们针对 OceanBase 组件建立了分区键，在需要定向查询某个组件的文档时能极大提升效率。
 
@@ -389,7 +389,11 @@ if args.doc_base is not None:
 执行以下命令启动聊天界面：
 
 ```bash
-poetry run streamlit run --server.runOnSave false chat_ui.py
+# 使用启动脚本
+./scripts/start.sh chat
+
+# 或者直接使用 poetry 运行
+poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 访问终端中显示的 URL 来打开聊天机器人应用界面。
@@ -412,20 +416,20 @@ poetry run streamlit run --server.runOnSave false chat_ui.py
 
 ### 2. 是否可以在初始加载后更新文档数据？
 
-当然可以。您可以通过运行 `embed_docs.py` 脚本插入新的文档数据。例如：
+当然可以。您可以通过运行 `src/tools/embed_docs.py` 脚本插入新的文档数据。例如：
 
 ```bash
 # 这将在当前目录中嵌入所有 markdown 文件，其中包含 README.md 和 LEGAL.md
-poetry run python embed_docs.py --doc_base .
+poetry run python src/tools/embed_docs.py --doc_base .
 
 # 或者您可以指定要插入数据的表
-poetry run python embed_docs.py --doc_base . --table_name my_table
+poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
 然后您可以在启动聊天界面之前指定 `TABLE_NAME` 环境变量，来指定聊天机器人将查询哪张表：
 
 ```bash
-TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 3. 如何查看嵌入和检索过程中数据库执行的操作？
@@ -433,7 +437,7 @@ TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
 当您自己插入文档时，可以设置 `--echo` 标志来查看脚本执行的 SQL 语句，如下所示：
 
 ```bash
-poetry run python embed_docs.py --doc_base . --table_name my_table --echo
+poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
 ```
 
 您将看到以下输出：
@@ -454,12 +458,12 @@ CREATE TABLE my_table (
 您还可以在启动聊天界面之前设置 `ECHO=true`，以查看聊天界面执行的 SQL 语句。
 
 ```bash
-ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 4. 为什么我在启动 UI 服务后再编辑 .env 文件不再生效？
 
-如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `poetry run streamlit run --server.runOnSave false chat_ui.py` 来重启服务。
+如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py` 来重启服务。
 
 ### 5. 如何更改聊天界面的语言？
 
