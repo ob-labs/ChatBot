@@ -114,6 +114,7 @@ class MarkdownDocumentsLoader:
         for file_path in files_to_process:
             for chunk in parse_md(file_path, max_chunk_size=max_chunk_size):
                 yield chunk
-                count += 1
-                if limit > 0 and count >= limit:
-                    break
+            count += 1
+            if limit > 0 and count >= limit:
+                print(f"Limit reached: {limit}, exiting.")
+                exit(0)

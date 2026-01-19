@@ -2,20 +2,20 @@ import re
 import os
 import time
 
-from i18n import t
+from src.frontend.i18n import t
 from typing import Iterator, Optional, Union
 from langchain_core.messages import AIMessageChunk
-from rag.embeddings import get_embedding
-from rag.documents import Document, DocumentMeta, component_mapping as cm
-from agents.base import AgentBase
-from agents.rag_agent import prompt as rag_prompt, prompt_en as rag_prompt_en
-from agents.universe_rag_agent import (
+from src.rag.embeddings import get_embedding
+from src.rag.documents import Document, DocumentMeta, component_mapping as cm
+from src.agents.base import AgentBase
+from src.agents.rag_agent import prompt as rag_prompt, prompt_en as rag_prompt_en
+from src.agents.universe_rag_agent import (
     prompt as universal_rag_prompt,
     prompt_en as universal_rag_prompt_en,
 )
-from agents.intent_guard_agent import prompt as guard_prompt
-from agents.comp_analyzing_agent import prompt as caa_prompt
-from connection import connection_args
+from src.agents.intent_guard_agent import prompt as guard_prompt
+from src.agents.comp_analyzing_agent import prompt as caa_prompt
+from src.common.connection import connection_args
 from sqlalchemy import Column, Integer
 
 from langchain_oceanbase.vectorstores import OceanbaseVectorStore
@@ -23,8 +23,8 @@ from langchain_oceanbase.vectorstores import OceanbaseVectorStore
 embeddings = get_embedding(
     ollama_url=os.getenv("OLLAMA_URL") or None,
     ollama_token=os.getenv("OLLAMA_TOKEN") or None,
-    base_url=os.getenv("OPENAI_BASE_URL") or None,
-    api_key=os.getenv("OPENAI_API_KEY") or None,
+    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
+    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or os.getenv("API_KEY") or None,
     model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
 )
 
@@ -78,11 +78,11 @@ def doc_search_by_vector(
 supported_components = cm.keys()
 
 replacers = [
-    (r"^.*oceanbase-doc", "https://github.com/oceanbase/oceanbase-doc/blob/V4.3.3"),
+    (r"^.*oceanbase-doc", "https://gitee.com/oceanbase-devhub/oceanbase-doc/blob/V4.3.4"),
     (r"^.*ocp-doc", "https://github.com/oceanbase/ocp-doc/blob/V4.3.0"),
     (r"^.*odc-doc", "https://github.com/oceanbase/odc-doc/blob/V4.3.1"),
     (r"^.*oms-doc", "https://github.com/oceanbase/oms-doc/blob/V4.2.5"),
-    (r"^.*obd-doc", "https://github.com/oceanbase/obd-doc/blob/V2.10.0"),
+    (r"^.*obd-doc", "https://github.com/oceanbase/obd-doc/blob/V2.10.1"),
     (
         r"^.*oceanbase-proxy-doc",
         "https://github.com/oceanbase/oceanbase-proxy-doc/blob/V4.3.0",
@@ -121,9 +121,9 @@ def extract_users_input(history: list[dict]) -> str:
 def doc_rag_stream(
     query: str,
     chat_history: list[dict],
+    llm_model: str,
     suffixes: list[any] = [],
     universal_rag: bool = False,
-    llm_model: str = "glm-4-flash",
     rerank: bool = False,
     search_docs: bool = True,
     lang: str = "zh",
@@ -149,7 +149,7 @@ def doc_rag_stream(
         yield t("analyzing_intent", lang) + get_elapsed_tips(
             start_time, start_time, lang=lang
         )
-        iga = AgentBase(prompt=guard_prompt, llm_model="glm-4-flash")
+        iga = AgentBase(prompt=guard_prompt, llm_model=llm_model)
         guard_res = iga.invoke_json(query)
         if hasattr(guard_res, "get"):
             query_type = guard_res.get("type", "Features")
@@ -168,7 +168,7 @@ def doc_rag_stream(
                 start_time, lang=lang
             )
             history_text = extract_users_input(chat_history)
-            caa_agent = AgentBase(prompt=caa_prompt, llm_model="glm-4-flash")
+            caa_agent = AgentBase(prompt=caa_prompt, llm_model=llm_model)
             analyze_res = caa_agent.invoke_json(
                 query="\n".join([history_text, query]),
                 background_history=[],

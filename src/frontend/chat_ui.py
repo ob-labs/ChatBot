@@ -4,8 +4,8 @@ import dotenv
 dotenv.load_dotenv()
 
 from typing import Iterator, Union
-from rag.doc_rag import doc_rag_stream
-from i18n import t
+from src.rag.doc_rag import doc_rag_stream
+from src.frontend.i18n import t
 
 import streamlit as st
 from langchain_core.messages import BaseMessageChunk
@@ -74,6 +74,8 @@ with st.sidebar:
             index=0,
             help=t("llm_model_help", lang),
         )
+    else:
+        llm_model = st.text_input(t("llm_model", lang), value=os.getenv("LLM_MODEL", ""))
     history_len = st.slider(
         t("chat_history_len", lang),
         min_value=0,

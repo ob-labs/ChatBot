@@ -3,10 +3,8 @@ import enum
 import requests
 from typing import List, Union, Optional
 
-from FlagEmbedding import BGEM3FlagModel
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
 
 
 __embedding = None
@@ -15,7 +13,7 @@ __embedding = None
 def get_embedding(
     ollama_url: Optional[str] = None,
     ollama_token: Optional[str] = None,
-    ollama_model: Optional[str] = None,
+    ollama_model: str = "bge-m3",
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
@@ -24,20 +22,91 @@ def get_embedding(
     if __embedding is not None:
         return __embedding
     if all([ollama_url, ollama_token]):
+        print("Using OllamaEmbedding")
         __embedding = OllamaEmbedding(
             ollama_url,
             ollama_token,
             ollama_model,
         )
     elif all([base_url, api_key, model]):
-        __embedding = OpenAIEmbeddings(
+        print("Using RemoteOpenAI")
+        __embedding = RemoteOpenAI(
             base_url=base_url,
             api_key=api_key,
             model=model,
         )
     else:
+        print("Using BGEEmbedding")
         __embedding = BGEEmbedding()
     return __embedding
+
+
+class RemoteOpenAI(Embeddings):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        dimensions: int = 1024,
+        **kwargs,
+    ):
+        self._base_url = base_url
+        self._api_key = api_key
+        self._model = model
+        self._dimensions = dimensions
+
+    """
+        Tongyi, Baichuan, Doubao
+    """
+
+    def embed_documents(
+        self,
+        texts: List[str],
+    ) -> List[List[float]]:
+        """Embed search docs.
+
+        Args:
+            texts: List of text to embed.
+
+        Returns:
+            List of embeddings.
+        """
+        res = requests.post(
+            f"{self._base_url}",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+                "Charset": "UTF-8",
+            },
+            json={
+                "input": texts,
+                "model": self._model,
+                "encoding_format": "float",
+                "dimensions": self._dimensions,
+            },
+        )
+        embeddings = []
+        try:
+            data = res.json()
+            for d in data["data"]:
+                embeddings.append(d["embedding"][: self._dimensions])
+            return embeddings
+        except Exception as e:
+            print("Invalid response:", res.text)
+            print("Error", e)
+            raise e
+
+    def embed_query(self, text: str, **kwargs) -> List[float]:
+        """Embed query text.
+
+        Args:
+            text: Text to embed.
+
+        Returns:
+            Embedding.
+        """
+        return self.embed_documents([text])[0]
+
 
 
 class BGEEmbedding(Embeddings):
@@ -55,6 +124,11 @@ class BGEEmbedding(Embeddings):
         Both = "both"
 
     def __init__(self, default_embedding_type: EmbeddingType = EmbeddingType.Dense):
+        try:
+            from FlagEmbedding import BGEM3FlagModel
+        except Exception as e:
+            print("Module FlagEmbedding not found, please execute `uv add flagembedding` first")
+            exit(1)
         self.__model = BGEM3FlagModel(
             model_name_or_path=os.getenv("BGE_MODEL_PATH", "BAAI/bge-m3"),
             pooling_method="cls",

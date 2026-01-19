@@ -56,7 +56,7 @@ tr = {
         "no_oceanbase": "这个问题与 OceanBase 无关。",
         "analyzing_components": "正在分析问题涉及的 OceanBase 组件...",
         "list_related_components": "问题涉及的 OceanBase 组件有：{}",
-        "embedding_query": "正在使用深度学习模型将问题嵌入向量...",
+        "embedding_query": "正在使用深度学习模型将提问内容嵌入为向量...",
         "searching_docs_for": "正在使用 OceanBase 检索 {} 的相关文档...",
         "searching_docs": "正在使用 OceanBase 检索相关文档...",
         "reranking_docs": "正在使用 BGE-M3 对检索到的文档进行重新排序...",

@@ -7,12 +7,12 @@ dotenv.load_dotenv()
 
 from langchain_oceanbase.vectorstores import OceanbaseVectorStore
 from langchain_core.documents import Document
-from rag.embeddings import get_embedding
-from rag.documents import MarkdownDocumentsLoader, component_mapping as cm
+from src.rag.embeddings import get_embedding
+from src.rag.documents import MarkdownDocumentsLoader, component_mapping as cm
 from pyobvector import ObListPartition, RangeListPartInfo
 from sqlalchemy import Column, Integer
 
-from connection import connection_args
+from src.common.connection import connection_args
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -63,8 +63,8 @@ print("args", args)
 embeddings = get_embedding(
     ollama_url=os.getenv("OLLAMA_URL") or None,
     ollama_token=os.getenv("OLLAMA_TOKEN") or None,
-    base_url=os.getenv("OPENAI_BASE_URL") or None,
-    api_key=os.getenv("OPENAI_API_KEY") or None,
+    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
+    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or None,
     model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
 )
 

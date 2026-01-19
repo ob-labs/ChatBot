@@ -2,44 +2,144 @@
 
 [英文版](./README.md)
 
-## 介绍
+## 项目介绍
 
-在这个动手实战营中，我们会构建一个 RAG 聊天机器人，用来回答与 OceanBase 文档相关的问题。它将采用开源的 OceanBase 文档仓库作为多模数据源，把文档转换为向量和结构化数据存储在 OceanBase 中。用户提问时，该机器人将用户的问题作为输入在数据库中进行文档检索，结合文档检索的结果，借助智谱 AI 提供的大语言模型能力来回答用户的问题。
+在这个动手实战营中，我们会构建一个 RAG 聊天机器人，用来回答与 OceanBase 文档相关的问题。它将采用开源的 OceanBase 文档仓库作为多模数据源，把文档转换为向量和结构化数据存储在 OceanBase 中。用户提问时，该机器人将用户的问题同样转换为向量之后在数据库中进行向量检索，结合向量检索得到的文档内容，借助通义千问提供的大语言模型能力来为用户提供更加准确的回答。
+
+### 项目组成
 
 该机器人将由以下几个组件组成：
 
-1. 将文档转换为向量的文本嵌入模型，BGE-M3
-2. 提供存储和查询文档向量和其他结构化数据的数据库，OceanBase
-3. 若干分析用户问题、基于检索到的文档和用户问题生成回答的 LLM 智能体，利用智谱 AI 的大模型能力
-4. 与用户交互的聊天界面，采用 Streamlit 搭建
+1. 将文档转换为向量的文本嵌入服务，在这里我们使用通义千问的嵌入 API
+2. 提供存储和查询文档向量和其他结构化数据能力的数据库，我们使用 OceanBase 4.3.3 版本
+3. 若干分析用户问题、基于检索到的文档和用户问题生成回答的 LLM 智能体，利用通义千问的大模型能力构建
+4. 机器人与用户交互的聊天界面，采用 Streamlit 搭建
 
-![RAG 流程](./demo/rag-flow.png)
+### 交互流程
+
+![RAG 流程](./images/rag-flow.png)
+
+1. 用户在 Web 界面中输入想要咨询的问题并发送给机器人
+2. 机器人将用户提出的问题使用文本嵌入模型转换为向量
+3. 将用户提问转换而来的向量作为输入在 OceanBase 中检索最相似的向量
+4. OceanBase 返回最相似的一些向量和对应的文档内容
+5. 机器人将用户的问题和查询到的文档一起发送给大语言模型并请它生成问题的回答
+6. 大语言模型分片地、流式地将答案返回给机器人
+7. 机器人将接收到的答案也分片地、流式地显示在 Web 界面中，完成一轮问答
+
+## 概念解析
+
+### 什么是文本嵌入?
+
+文本嵌入是一种将文本转换为数值向量的技术。这些向量能够捕捉文本的语义信息，使计算机可以"理解"和处理文本的含义。具体来说:
+
+- 文本嵌入将词语或句子映射到高维向量空间中的点
+- 在这个向量空间中，语义相似的文本会被映射到相近的位置
+- 向量通常由数百个数字组成(如 512 维、1024 维等)
+- 可以用数学方法(如余弦相似度)计算向量之间的相似度
+- 常见的文本嵌入模型包括 Word2Vec、BERT、BGE 等
+
+在本项目中，我们使用通义千问的文本嵌入模型来生成文档的向量表示，这些向量将被存储在 OceanBase 数据库中用于后续的相似度检索。
+
+例如使用嵌入模型将“苹果”、“香蕉”和“橘子”分别转换为 4 维的向量，它们的向量表示可能如下图所示，需要注意的是我们为了方便表示，将向量的维度降低到了 4 维，实际上文本嵌入产生的向量维数通常是几百或者几千维，例如我们使用的通义千问 text-embedding-v3 产生的向量维度是 1024 维。
+
+![Embedding Example](./images/embedding-example.png)
+
+### 什么是向量检索?
+
+向量检索是在向量数据库中快速找到与查询向量最相似的向量的技术。其核心特点包括:
+
+- 基于向量间的距离（如欧氏距离）或相似度（如余弦相似度）进行搜索
+- 通常使用近似最近邻（Approximate Nearest Neighbor, ANN）算法来提高检索效率
+- OceanBase 4.3.3 支持 HNSW 算法，这是一种高效的 ANN 算法
+- 使用 ANN 可以快速从百万甚至亿级别的向量中找到近似最相似的结果
+- 相比传统关键词搜索，向量检索能更好地理解语义相似性
+
+OceanBase 在关系型数据库模型基础上将“向量”作为一种数据类型进行了完好的支持，使得在 OceanBase 一款数据库中能够同时针对向量数据和常规的结构化数据进行高效的存储和检索。在本项目中，我们会使用 OceanBase 建立 HNSW (Hierarchical Navigable Small World) 向量索引来实现高效的向量检索，帮助我们快速找到与用户问题最相关的文档片段。
+
+如果我们在已经嵌入“苹果”、“香蕉”和“橘子”的 OceanBase 数据库中使用“红富士”作为查询文本，那么我们可能会得到如下的结果，其中“苹果”和“红富士”之间的相似度最高。（假设我们使用余弦相似度作为相似度度量）
+
+![Vector Search Example](./images/vector-search-example.png)
+
+### 什么是 RAG?
+
+RAG (Retrieval-Augmented Generation，检索增强生成) 是一种结合检索系统和生成式 AI 的混合架构，用于提高 AI 回答的准确性和可靠性。其工作流程为:
+
+1. 检索阶段:
+
+- 将用户问题转换为向量
+- 在知识库中检索相关文档
+- 选择最相关的文档片段
+
+2. 生成阶段:
+
+- 将检索到的文档作为上下文提供给大语言模型
+- 大语言模型基于问题和上下文生成回答
+- 确保回答的内容来源可追溯
+
+RAG 的主要优势有：
+
+- 降低大语言模型的幻觉问题
+- 能够利用最新的知识和专业领域信息
+- 提供可验证和可追溯的答案
+- 适合构建特定领域的问答系统
+
+大语言模型的训练和发布需要耗费较长的时间，且训练数据在开启训练之后便停止了更新。而现实世界的信息熵增无时无刻不在持续，要让大语言模型在“昏迷”几个月之后还能自发地掌握当下最新的信息显然是不现实的。而 RAG 就是让大模型用上了“搜索引擎”，在回答问题前先获取新的知识输入，这样通常能较大幅度地提高生成回答的准确性。
 
 ## 准备工作
 
-注意：如果您正在参加 OceanBase AI 动手实战营，您可以跳过以下步骤 1 ~ 3。所有所需的软件都已经在机器上准备好了。:)
+注意：如果您正在参加 OceanBase AI 动手实战营，您可以跳过以下步骤 1 ~ 4。所有所需的软件都已经在机器上准备好了。:)
 
-1. 安装 [Python 3.9+](https://www.python.org/downloads/) 和 [pip](https://pip.pypa.io/en/stable/installation/)
+1. 安装 [Python 3.11+](https://www.python.org/downloads/) 和 [pip](https://pip.pypa.io/en/stable/installation/)。如果您的机器上 Python 版本较低，可以使用 Miniconda 来创建新的 Python 3.11 及以上的环境，具体可参考 [Miniconda 安装指南](https://docs.anaconda.com/miniconda/install/)。
 
-2. 安装 [Poetry](https://python-poetry.org/docs/)
+2. 安装 [uv](https://docs.astral.sh/uv/)，可参考命令 `curl -LsSf https://astral.sh/uv/install.sh | sh` 或 `pip install uv`
 
-```bash
-python3 -m pip install poetry
-```
+3. 安装 [Docker](https://docs.docker.com/engine/install/)（可选，如果您计划使用 Docker 在本地部署 OceanBase 数据库则必须安装）
 
-3. 安装 [Docker](https://docs.docker.com/engine/install/)
+4. 安装 MySQL 客户端，可参考 `yum install -y mysql` 或者 `apt-get install -y mysql-client`（可选，如果您需要使用 MySQL 客户端检验数据库连接则必须安装）
 
-4. 注册 [智谱 AI](https://open.bigmodel.cn/) 账号并获取 API Key
+5. 确保您机器上该项目的代码是最新的状态，建议进入项目目录执行 `git pull`
 
-![智谱 AI](./demo/zhipu-dashboard.png)
+6. 注册[阿里云百炼](https://bailian.console.aliyun.com/)账号，开通模型服务并获取 API Key
 
-![智谱 API Key](./demo/zhipu-api-key.png)
+![点击开通模型服务](./images/activate-models.png)
+
+![确认开通模型服务](./images/confirm-to-activate-models.png)
+
+![阿里云百炼](./images/dashboard.png)
+
+![获取阿里云百炼 API Key](./images/get-api-key.png)
 
 ## 构建聊天机器人
 
-### 1. 部署 OceanBase 集群
+### 1. 获取 OceanBase 数据库
 
-#### 1.1 启动 OceanBase docker 容器
+我们首先要获取 OceanBase 4.3.3 版本及以上的数据库来存储我们的向量数据。您可以通过以下两种方式获取 OceanBase 数据库：
+
+1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)；（推荐）
+2. 使用 Docker 启动单机版 OceanBase 数据库。（备选，需要有 Docker 环境，消耗较多本地资源）
+
+#### 1.1 使用 OB Cloud 云数据库免费试用版
+
+##### 注册并开通实例
+
+进入[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)页面，点击“立即试用”按钮，注册并登录账号，填写相关信息，开通实例，等待创建完成。
+
+##### 获取数据库实例连接串
+
+进入实例详情页的“实例工作台”，点击“连接”-“获取连接串”按钮来获取数据库连接串，将其中的连接信息填入后续步骤中创建的 .env 文件内。
+
+![获取数据库连接串](./images/obcloud-get-connection.png)
+
+##### 修改参数启用向量模块
+
+进入实例详情页的“参数管理”，将 `ob_vector_memory_limit_percentage` 参数修改为 30 以启动向量模块。
+
+![修改参数以启用向量功能](./images/obcloud-modify-param.png)
+
+#### 1.2 使用 Docker 启动单机版 OceanBase 数据库
+
+##### 启动 OceanBase 容器
 
 如果你是第一次登录动手实战营提供的机器，你需要通过以下命令启动 Docker 服务：
 
@@ -50,7 +150,7 @@ systemctl start docker
 随后您可以使用以下命令启动一个 OceanBase docker 容器：
 
 ```bash
-docker run --ulimit stack=4294967296 --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
+docker run --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -e OB_SERVER_IP=127.0.0.1 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
 ```
 
 如果上述命令执行成功，将会打印容器 ID，如下所示：
@@ -59,7 +159,7 @@ docker run --ulimit stack=4294967296 --name=ob433 -e MODE=mini -e OB_MEMORY_LIMI
 af5b32e79dc2a862b5574d05a18c1b240dc5923f04435a0e0ec41d70d91a20ee
 ```
 
-#### 1.2 检查 OceanBase 初始化是否完成
+##### 检查 OceanBase 数据库初始化是否完成
 
 容器启动后，您可以使用以下命令检查 OceanBase 数据库初始化状态：
 
@@ -81,26 +181,16 @@ Wait for observer init ok
 +------------+---------+------+-------+--------+
 | ip         | version | port | zone  | status |
 +------------+---------+------+-------+--------+
-| 172.17.0.2 | 4.3.3.0 | 2881 | zone1 | ACTIVE |
+| 172.17.0.2 | 4.3.3.1 | 2881 | zone1 | ACTIVE |
 +------------+---------+------+-------+--------+
 obclient -h172.17.0.2 -P2881 -uroot -Doceanbase -A
 
 cluster unique id: c17ea619-5a3e-5656-be07-00022aa5b154-19298807cfb-00030304
 
 obcluster running
-Trace ID: 08f99c98-8c37-11ef-ad07-0242ac110002
-If you want to view detailed obd logs, please run: obd display-trace 08f99c98-8c37-11ef-ad07-0242ac110002
-Get local repositories and plugins ok
-Open ssh connection ok
-Connect to observer ok
-Create tenant test ok
-Exec oceanbase-ce-4.3.3.0-100000142024101215.el8-3eee13839888800065c13ffc5cd7c3e6b12cb55c import_time_zone_info.py ok
-Exec oceanbase-ce-4.3.3.0-100000142024101215.el8-3eee13839888800065c13ffc5cd7c3e6b12cb55c import_srs_data.py ok
-obclient -h172.17.0.2 -P2881 -uroot@test -Doceanbase -A
 
-optimize tenant with scenario: express_oltp ok
-Trace ID: 3c50193c-8c37-11ef-ace2-0242ac110002
-If you want to view detailed obd logs, please run: obd display-trace 3c50193c-8c37-11ef-ace2-0242ac110002
+...
+
 check tenant connectable
 tenant is connectable
 boot success!
@@ -108,7 +198,7 @@ boot success!
 
 使用 `Ctrl + C` 退出日志查看界面。
 
-#### 1.3 测试数据库部署情况（可选）
+##### 测试数据库部署情况（可选）
 
 可以使用 mysql 客户端连接到 OceanBase 集群，检查数据库部署情况。
 
@@ -137,10 +227,10 @@ mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
 cd ~/ai-workshop-2024
 ```
 
-我们使用 Poetry 来管理聊天机器人项目的依赖项。您可以使用以下命令安装依赖项：
+我们使用 uv 来管理聊天机器人项目的依赖项。您可以使用以下命令安装依赖项：
 
 ```bash
-poetry install
+uv sync
 ```
 
 如果您正在使用动手实战营提供的机器，您会看到以下消息，因为依赖都已经预先安装在了机器上：
@@ -161,16 +251,26 @@ cp .env.example .env
 vi .env
 ```
 
-`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用智谱 AI 提供的 LLM 能力），您只需要更新 `API_KEY` 为您从智谱 AI 控制台获取的值，其他值可以保留为默认值。
+`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用通义千问提供的 LLM 能力），您需要把 `API_KEY` 和 `OPENAI_EMBEDDING_API_KEY` 更新为您从阿里云百炼控制台获取的 API KEY 值，如果您使用 OB Cloud 的数据库实例，请将 `DB_` 开头的变量更新为您的数据库连接信息，然后保存文件。
 
 ```bash
-API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # 把这个配置项更新为您从智谱 AI 上获取到的 API_KEY
-LLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4/"
-LLM_MODEL="glm-4-flash"
+API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # 填写 API Key
+LLM_MODEL="qwen-turbo-2024-11-01"
+LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 HF_ENDPOINT=https://hf-mirror.com
 BGE_MODEL_PATH=BAAI/bge-m3
 
+OLLAMA_URL=
+OLLAMA_TOKEN=
+
+OPENAI_EMBEDDING_API_KEY= # 填写 API Key
+OPENAI_EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+OPENAI_EMBEDDING_MODEL=text-embedding-v3
+
+UI_LANG="zh"
+
+# 如果你使用的是 OB Cloud 的实例，请根据实例的连接信息更新下面的变量
 DB_HOST="127.0.0.1"
 DB_PORT="2881"
 DB_USER="root@test"
@@ -178,103 +278,122 @@ DB_NAME="test"
 DB_PASSWORD=""
 ```
 
-### 4. 准备 BGE-M3 模型
+### 4. 连接数据库
 
-BGE-M3 是一个预训练模型，可以将文本转换为向量。它在多种语言的嵌入任务中表现良好，可以用于将 OceanBase 的开源文档嵌入成为向量。
-
-我们通过执行以下命令准备 BGE-M3 模型：
+您可使用我们准备好的脚本来尝试连接数据库，以确保数据库相关的环境变量设置成功：
 
 ```bash
-poetry run python utils/prepare_bgem3.py
-```
-
-BGE-M3 模型文件大小约为 2 ~ 3 GB，下载过程可能会花费较长时间，具体时间取决于您的网络状况。如果模型已经下载完成，这一步大约需要半分钟来加载模型。当模型准备好时，您将看到以下消息：
-
-```bash
-Fetching 30 files: 100%|████████████████████████████████████████████████████████████████| 30/30 [00:00<00:00, 104509.24it/s]
-/root/.cache/pypoetry/virtualenvs/ai-workshop-aLQYZfdO-py3.10/lib/python3.10/site-packages/FlagEmbedding/BGE_M3/modeling.py:335: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  colbert_state_dict = torch.load(os.path.join(model_dir, 'colbert_linear.pt'), map_location='cpu')
-/root/.cache/pypoetry/virtualenvs/ai-workshop-aLQYZfdO-py3.10/lib/python3.10/site-packages/FlagEmbedding/BGE_M3/modeling.py:336: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  sparse_state_dict = torch.load(os.path.join(model_dir, 'sparse_linear.pt'), map_location='cpu')
-
-===================================
-BGEM3FlagModel loaded successfully！
-===================================
+bash scripts/connect_db.sh
+# 如果顺利进入 MySQL 连接当中，则验证了环境变量设置成功
 ```
 
 ### 5. 准备文档数据
 
-#### 5.1 下载预处理数据并加载（速度快，仅限动手实战营活动中使用）
+在该步骤中，我们将克隆 OceanBase 相关组件的开源文档仓库并处理它们，生成文档的向量数据和其他结构化数据后将数据插入到我们在步骤 1 中部署好的 OceanBase 数据库。
 
-在这一步中，我们将加载预处理的文档数据到 OceanBase 数据库中。
+#### 5.1 克隆文档仓库
 
-```bash
-# 加载预处理的文档数据
-poetry run python utils/load.py --source_file ~/data.json
-```
-
-加载数据大约需要 2 分钟。您将看到以下输出：（SAWarnings 可以忽略）
+首先我们将使用 git 克隆 oceanbase 的文档到本地。
 
 ```bash
-args Namespace(table_name='corpus', source_file='/root/data.json', skip_create=False, insert_batch=100)
-  0%|                                                                                                                                                                                                                                                          | 0/27412 [00:00<?, ?it/s]
-/root/.cache/pypoetry/virtualenvs/ai-workshop-aLQYZfdO-py3.10/lib/python3.10/site-packages/pyobvector/client/ob_vec_client.py:329: SAWarning: Unknown schema content: '  VECTOR KEY `vidx` (`embedding`) WITH (DISTANCE=L2,M=16,EF_CONSTRUCTION=256,LIB=VSAG,TYPE=HNSW, EF_SEARCH=64) BLOCK_SIZE 16384'
-  table = Table(table_name, self.metadata_obj, autoload_with=self.engine)
-100%|██████████████████████████████████████████████████████████████████| 27412/27412 [01:44<00:00, 262.02it/s]
+git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git data/doc_repos/oceanbase-doc
+# 如果您访问 Github 仓库速度较慢，可以使用以下命令克隆 Gitee 的镜像版本
+git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git data/doc_repos/oceanbase-doc
 ```
 
-注意：`data.json` 文件是一个预处理的文档数据文件，包含文档的向量数据和元数据。它是由步骤 5.2 处理得到、并通过执行 `utils/extract.py` 脚本提取出来的。如果您不想使用预处理数据而是打算自己嵌入文档并插入数据库，请转到步骤 5.2。
+#### 5.2 文档格式标准化
 
-#### 5.2 克隆文档仓库并处理（速度慢）
-
-注意：步骤 5.2 在 CPU 机器上通常要花费几个小时甚至更长的时间。
-
-在该步骤中，我们将克隆 OceanBase 开源文档仓库并处理它们，生成文档的向量数据和其他结构化数据后将数据插入到我们在步骤 1 部署好的 OceanBase 数据库中。
-
-```bash
-cd doc_repos
-git clone --single-branch --branch V4.3.3 https://github.com/oceanbase/oceanbase-doc.git
-git clone --single-branch --branch V4.3.0 https://github.com/oceanbase/ocp-doc.git
-git clone --single-branch --branch V4.3.1 https://github.com/oceanbase/odc-doc.git
-git clone --single-branch --branch V4.2.5 https://github.com/oceanbase/oms-doc.git
-git clone --single-branch --branch V2.10.0 https://github.com/oceanbase/obd-doc.git
-git clone --single-branch --branch V4.3.0 https://github.com/oceanbase/oceanbase-proxy-doc.git
-cd ..
-```
+因为 OceanBase 的开源文档中有些文件使用 `====` 和 `----` 来表示一级标题和二级标题，我们在这一步将其转化为标准的 `#` 和 `##` 表示。
 
 ```bash
 # 把文档的标题转换为标准的 markdown 格式
-poetry run python convert_headings.py \
-  doc_repos/oceanbase-doc/zh-CN \
-  doc_repos/ocp-doc/zh-CN \
-  doc_repos/odc-doc/zh-CN \
-  doc_repos/oms-doc/zh-CN \
-  doc_repos/obd-doc/zh-CN \
-  doc_repos/oceanbase-proxy-doc/zh-CN
-
-# 生成文档向量和元数据
-poetry run python embed_docs.py --doc_base doc_repos/oceanbase-doc/zh-CN
-poetry run python embed_docs.py --doc_base doc_repos/ocp-doc/zh-CN --component ocp
-poetry run python embed_docs.py --doc_base doc_repos/odc-doc/zh-CN --component odc
-poetry run python embed_docs.py --doc_base doc_repos/oms-doc/zh-CN --component oms
-poetry run python embed_docs.py --doc_base doc_repos/obd-doc/zh-CN --component obd
-poetry run python embed_docs.py --doc_base doc_repos/oceanbase-proxy-doc/zh-CN --component odp
+uv run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
 ```
 
-如果你想要将上述步骤生成并插入到数据库中的数据提取出来保存在 `my-data.json` 的文件中，可以执行以下命令：
+#### 5.3 将文档转换为向量并插入 OceanBase 数据库
+
+我们提供了 `src/tools/embed_docs.py` 脚本，通过指定文档目录和对应的组件后，该脚本就会遍历目录中的所有 markdown 格式的文档，将长文档进行切片后使用嵌入模型转换为向量，并最终将文档切片的内容、嵌入的向量和切片的元信息（JSON 格式，包含文档标题、相对路径、组件名称、切片标题、级联标题）一同插入到 OceanBase 的同一张表中，作为预备数据待查。
+
+为了节省时间，我们只处理 OceanBase 众多文档中与向量检索有关的几篇文档，在第 6 步打开聊天界面之后，您针对 OceanBase 的向量检索功能进行的提问将得到较为准确的回答。
 
 ```bash
-poetry run python utils/extract.py --output_file ~/my-data.json
+# 生成文档向量和元数据
+uv run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
 ```
 
-这就是我们获取预处理数据 `data.json` 的方法。
+在等待文本处理的过程中我们可以浏览 `src/tools/embed_docs.py` 的内容，观察它是如何工作的。
+
+首先在该文件中实例化了两个对象，一个是负责将文本内容转化为向量数据的嵌入服务 `embeddings`；另一个是 OceanBase 对接的 LangChain Vector Store 服务，封装了 pyobvector 这个 OceanBase 的向量检索 SDK，为用户提供简单易用的接口方法。同时我们针对 OceanBase 组件建立了分区键，在需要定向查询某个组件的文档时能极大提升效率。
+
+```python
+embeddings = get_embedding(
+    ollama_url=os.getenv("OLLAMA_URL") or None,
+    ollama_token=os.getenv("OLLAMA_TOKEN") or None,
+    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
+    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or None,
+    model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
+)
+
+vs = OceanBase(
+    embedding_function=embeddings, # 传入嵌入服务，将在插入文档时即时调用
+    table_name=args.table_name,
+    connection_args=connection_args,
+    metadata_field="metadata",
+    extra_columns=[Column("component_code", Integer, primary_key=True)],
+    partitions=ObListPartition(
+        is_list_columns=False,
+        list_part_infos=[RangeListPartInfo(k, v) for k, v in cm.items()]
+        + [RangeListPartInfo("p10", "DEFAULT")],
+        list_expr="component_code",
+    ),
+    echo=args.echo,
+)
+```
+
+接下来，该脚本判断所连接的 OceanBase 集群是否已开启了向量功能模块，如果没有开启则使用 SQL 命令进行启动。
+
+```python
+# 通过查询 ob_vector_memory_limit_percentage 参数判断是否已开启向量功能模块
+params = vs.obvector.perform_raw_text_sql(
+    "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
+)
+# ...
+
+# 通过将 ob_vector_memory_limit_percentage 参数设置为 30 来开启向量功能模块
+vs.obvector.perform_raw_text_sql(
+  "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
+)
+```
+
+最后，我们遍历文档目录，将文档内容读取并切片之后提交给 OceanBase Vector Store 进行嵌入和存储。
+
+```python
+if args.doc_base is not None:
+    loader = MarkdownDocumentsLoader(
+        doc_base=args.doc_base,
+        skip_patterns=args.skip_patterns,
+    )
+    batch = []
+    for doc in loader.load(limit=args.limit):
+        if len(batch) == args.batch_size:
+            insert_batch(batch, comp=args.component)
+            batch = []
+        batch.append(doc)
+
+    if len(batch) > 0:
+        insert_batch(batch, comp=args.component)
+```
 
 ### 6. 启动聊天界面
 
 执行以下命令启动聊天界面：
 
 ```bash
-poetry run streamlit run --server.runOnSave false chat_ui.py
+# 使用启动脚本
+./scripts/start.sh chat
+
+# 或者直接使用 poetry 运行
+uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 访问终端中显示的 URL 来打开聊天机器人应用界面。
@@ -287,38 +406,38 @@ poetry run streamlit run --server.runOnSave false chat_ui.py
   External URL: http://xxx.xxx.xxx.xxx:8501 # 这是您可以从浏览器访问的 URL
 ```
 
-![](./demo/chatbot-ui.png)
+![Chat UI](./images/chatbot-ui.png)
 
 ## FAQ
 
 ### 1. 如何更改用于生成回答的 LLM 模型？
 
-您可以通过更新 `.env` 文件中的 `LLM_MODEL` 环境变量来更改 LLM 模型。默认值是 `glm-4-flash`，这是智谱 AI 提供的免费模型。还有其他可用的模型，如 `glm-4-air`、`glm-4-plus`、`glm-4-long` 等。您可以在[智谱 AI 网站](https://open.bigmodel.cn) 上找到完整的模型列表。
+您可以通过更新 `.env` 文件中的 `LLM_MODEL` 环境变量来更改 LLM 模型，或者是在启动的对话界面左侧修改“大语言模型”。默认值是 `qwen-turbo-2024-11-01`，这是通义千问近期推出的具有较高免费额度的模型。还有其他可用的模型，如 `qwen-plus`、`qwen-max`、`qwen-long` 等。您可以在[阿里云百炼网站](https://bailian.console.aliyun.com/)的模型广场中找到完整的可用模型列表。请注意免费额度及计费标准。
 
 ### 2. 是否可以在初始加载后更新文档数据？
 
-当然可以。您可以通过运行 `embed_docs.py` 脚本插入新的文档数据。例如：
+当然可以。您可以通过运行 `src/tools/embed_docs.py` 脚本插入新的文档数据。例如：
 
 ```bash
 # 这将在当前目录中嵌入所有 markdown 文件，其中包含 README.md 和 LEGAL.md
-poetry run python embed_docs.py --doc_base .
+uv run python src/tools/embed_docs.py --doc_base .
 
 # 或者您可以指定要插入数据的表
-poetry run python embed_docs.py --doc_base . --table_name my_table
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
 然后您可以在启动聊天界面之前指定 `TABLE_NAME` 环境变量，来指定聊天机器人将查询哪张表：
 
 ```bash
-TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
-### 3. 如何知道嵌入和检索过程中数据库执行的操作？
+### 3. 如何查看嵌入和检索过程中数据库执行的操作？
 
 当您自己插入文档时，可以设置 `--echo` 标志来查看脚本执行的 SQL 语句，如下所示：
 
 ```bash
-poetry run python embed_docs.py --doc_base . --table_name my_table --echo
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
 ```
 
 您将看到以下输出：
@@ -339,12 +458,12 @@ CREATE TABLE my_table (
 您还可以在启动聊天界面之前设置 `ECHO=true`，以查看聊天界面执行的 SQL 语句。
 
 ```bash
-ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false chat_ui.py
+ECHO=true TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 4. 为什么我在启动 UI 服务后再编辑 .env 文件不再生效？
 
-如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `poetry run streamlit run --server.runOnSave false chat_ui.py` 来重启服务。
+如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py` 来重启服务。
 
 ### 5. 如何更改聊天界面的语言？
 

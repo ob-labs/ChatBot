@@ -1,31 +1,35 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "ai-workshop"
 version = "0.1.0"
-description = ""
-authors = ["yuyi <yuyi.wsy@oceanbase.com>"]
+description = "OceanBase AI Workshop - RAG Chatbot"
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.9,<4.0"
+authors = [
+    { name = "yuyi", email = "yuyi.wsy@oceanbase.com" }
+]
+dependencies = [
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "streamlit>=1.38.0",
+    "pyobvector>=0.1.14",
+    "flagembedding>=1.2.11",
+    "peft>=0.13.1",
+    "langchain-oceanbase>=0.2.0",
+    "python-dotenv>=1.0.1",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
-langchain = "^0.3.0"
-langchain-openai = "^0.2.0"
-streamlit = "^1.38.0"
-pyobvector = "^0.1.6"
-flagembedding = "^1.2.11"
-peft = { version = "^0.13.1" }
-python-dotenv = "^1.0.1"
-langchain-oceanbase = "^0.2.0"
+[[tool.uv.index]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+explicit = false
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[[tool.poetry.source]]
-name = "PyPI"
-priority = "primary"
-
-[[tool.poetry.source]]
-name = "tuna"
-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
-priority = "supplemental"
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = false
+explicit = true
