@@ -1,12 +1,20 @@
-import os
-import dotenv
+from src.common.config import (
+    get_db_host,
+    get_db_name,
+    get_db_password,
+    get_db_port,
+    get_db_user,
+)
+from src.common.logger import get_logger
 
-dotenv.load_dotenv()
+logger = get_logger(__name__)
 
 connection_args = {
-    "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD").replace("@", "%40") if os.getenv("DB_PASSWORD") else "",
-    "db_name": os.getenv("DB_NAME"),
+    "host": get_db_host(),
+    "port": get_db_port(),
+    "user": get_db_user(),
+    "password": get_db_password(),
+    "db_name": get_db_name(),
 }
+
+logger.info(f"Database connection configured: host={get_db_host()}, port={get_db_port()}, db_name={get_db_name()}")

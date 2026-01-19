@@ -1,19 +1,27 @@
-import os
-import uuid
 import argparse
-import dotenv
+import uuid
 
-dotenv.load_dotenv()
-
-from langchain_oceanbase.vectorstores import OceanbaseVectorStore
+import pyseekdb
 from langchain_core.documents import Document
-from src.rag.embeddings import get_embedding
-from src.rag.documents import MarkdownDocumentsLoader, component_mapping as cm
+from langchain_oceanbase.vectorstores import OceanbaseVectorStore
 from pyobvector import ObListPartition, RangeListPartInfo
 from sqlalchemy import Column, Integer
-import pyseekdb
 
+from src.common.config import (
+    get_db_password_raw,
+    get_ollama_token,
+    get_ollama_url,
+    get_openai_embedding_api_key,
+    get_openai_embedding_base_url,
+    get_openai_embedding_model,
+)
 from src.common.connection import connection_args
+from src.common.logger import get_logger
+from src.rag.documents import MarkdownDocumentsLoader
+from src.rag.documents import component_mapping as cm
+from src.rag.embedding import get_embedding
+
+logger = get_logger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -59,14 +67,15 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+logger.info(f"Command line arguments: {args}")
 print("args", args)
 
 embeddings = get_embedding(
-    ollama_url=os.getenv("OLLAMA_URL") or None,
-    ollama_token=os.getenv("OLLAMA_TOKEN") or None,
-    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
-    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or None,
-    model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
+    ollama_url=get_ollama_url(),
+    ollama_token=get_ollama_token(),
+    base_url=get_openai_embedding_base_url(),
+    api_key=get_openai_embedding_api_key(),
+    model=get_openai_embedding_model(),
 )
 
 vs = OceanbaseVectorStore(
@@ -90,54 +99,64 @@ sql_client = pyseekdb.Client(
     port=int(connection_args.get("port", "2881")),
     database=connection_args["db_name"],
     user=connection_args["user"],
-    password=connection_args["password"],
+    password=get_db_password_raw(),
 )
 
+logger.info("Checking and setting database parameters")
 vals = []
-params = sql_client.execute(
-    "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
-)
+params = sql_client.execute("SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'")
 for row in params:
     val = int(row[6])
     vals.append(val)
 if len(vals) == 0:
+    logger.error("ob_vector_memory_limit_percentage not found in parameters.")
     print("ob_vector_memory_limit_percentage not found in parameters.")
     exit(1)
 if any(val == 0 for val in vals):
     try:
-        sql_client.execute(
-            "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
-        )
+        logger.info("Setting ob_vector_memory_limit_percentage to 30")
+        sql_client.execute("ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30")
+        logger.info("Successfully set ob_vector_memory_limit_percentage to 30")
     except Exception as e:
+        logger.error(f"Failed to set ob_vector_memory_limit_percentage to 30: {e}")
         print("Failed to set ob_vector_memory_limit_percentage to 30.")
         print("Error message:", e)
         exit(1)
+logger.info("Setting ob_query_timeout to 100000000")
 sql_client.execute("SET ob_query_timeout=100000000")
 
 
 def insert_batch(docs: list[Document], comp: str = "observer"):
     code = cm[comp]
     if not code:
+        logger.error(f"Component {comp} not found in component_mapping.")
         raise ValueError(f"Component {comp} not found in component_mapping.")
+    logger.info(f"Inserting batch of {len(docs)} documents for component {comp}")
     vs.add_documents(
         docs,
         ids=[str(uuid.uuid4()) for _ in range(len(docs))],
         extras=[{"component_code": code} for _ in docs],
         partition_name=comp,
     )
+    logger.debug(f"Successfully inserted {len(docs)} documents for component {comp}")
 
 
 if args.doc_base is not None:
+    logger.info(f"Starting document embedding process: doc_base={args.doc_base}, component={args.component}, limit={args.limit}, batch_size={args.batch_size}")
     loader = MarkdownDocumentsLoader(
         doc_base=args.doc_base,
         skip_patterns=args.skip_patterns,
     )
     batch = []
+    total_docs = 0
     for doc in loader.load(limit=args.limit):
         if len(batch) == args.batch_size:
             insert_batch(batch, comp=args.component)
+            total_docs += len(batch)
             batch = []
         batch.append(doc)
 
     if len(batch) > 0:
         insert_batch(batch, comp=args.component)
+        total_docs += len(batch)
+    logger.info(f"Document embedding process completed: total documents embedded={total_docs}")

@@ -1,11 +1,19 @@
+import argparse
+import json
+
 from tqdm import tqdm
 
-import os
-import json
-import dotenv
-import argparse
+from src.common.config import (
+    get_db_host,
+    get_db_name,
+    get_db_password_raw,
+    get_db_port,
+    get_db_user,
+    get_int_env,
+)
+from src.common.logger import get_logger
 
-dotenv.load_dotenv()
+logger = get_logger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -34,48 +42,57 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+logger.info(f"Command line arguments: {args}")
 print("args", args)
 
 import pyseekdb
 
+logger.info("Connecting to database")
 client = pyseekdb.Client(
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT", "2881")),
-    database=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
+    host=get_db_host(),
+    port=get_int_env("DB_PORT", 2881),
+    database=get_db_name(),
+    user=get_db_user(),
+    password=get_db_password_raw(),
 )
+logger.info("Database connection established")
 
+logger.info("Checking and setting database parameters")
 vals = []
-params = client.execute(
-    "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
-)
+params = client.execute("SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'")
 for row in params:
     val = int(row[6])
     vals.append(val)
 if len(vals) == 0:
+    logger.error("ob_vector_memory_limit_percentage not found in parameters.")
     print("ob_vector_memory_limit_percentage not found in parameters.")
     exit(1)
 if any(val == 0 for val in vals):
     try:
-        client.execute(
-            "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
-        )
+        logger.info("Setting ob_vector_memory_limit_percentage to 30")
+        client.execute("ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30")
+        logger.info("Successfully set ob_vector_memory_limit_percentage to 30")
     except Exception as e:
+        logger.error(f"Failed to set ob_vector_memory_limit_percentage to 30: {e}")
         print("Failed to set ob_vector_memory_limit_percentage to 30.")
         print("Error message:", e)
         exit(1)
+logger.info("Setting ob_query_timeout to 100000000")
 client.execute("SET ob_query_timeout=100000000")
 
 table_exist = client.has_collection(args.table_name)
+logger.info(f"Table {args.table_name} exists: {table_exist}")
 
 if table_exist and not args.skip_create:
+    logger.error(f"Table {args.table_name} already exists.")
     print(f"Table {args.table_name} already exists.")
     exit(1)
 elif not table_exist and args.skip_create:
+    logger.error(f"Table {args.table_name} does not exist.")
     print(f"Table {args.table_name} does not exist.")
     exit(1)
 elif not args.skip_create:
+    logger.info(f"Creating table: {args.table_name}")
     create_table_sql = f"""
     CREATE TABLE `{args.table_name}` (
     `id` varchar(4096) NOT NULL,
@@ -98,12 +115,16 @@ elif not args.skip_create:
     """
 
     client.execute(create_table_sql)
+    logger.info(f"Table {args.table_name} created successfully")
 
+logger.info(f"Loading data from source file: {args.source_file}")
 with open(args.source_file, "r") as f:
     values = json.load(f)
+    logger.info(f"Loaded {len(values)} records from source file")
     progress = tqdm(total=len(values))
     for i in range(0, len(values), args.insert_batch):
         batch = values[i : i + args.insert_batch]
+        logger.debug(f"Inserting batch {i // args.insert_batch + 1}: {len(batch)} records")
         # Use SQL INSERT with proper escaping
         for item in batch:
             id_val = item.get("id", "")
@@ -125,6 +146,7 @@ with open(args.source_file, "r") as f:
             try:
                 client.execute(insert_sql)
             except Exception as e:
+                logger.warning(f"CAST insert failed, using fallback: {e}")
                 # Fallback to simpler insert if CAST fails
                 insert_sql = f"""
                 INSERT INTO `{args.table_name}` (`id`, `embedding`, `document`, `metadata`, `component_code`)
@@ -138,3 +160,4 @@ with open(args.source_file, "r") as f:
                 """
                 client.execute(insert_sql)
         progress.update(len(batch))
+    logger.info(f"Successfully loaded {len(values)} records into table {args.table_name}")

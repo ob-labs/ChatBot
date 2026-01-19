@@ -75,5 +75,10 @@ prompt = """
 """
 
 from agents.base import AgentBase
+from src.common.logger import get_logger
 
+logger = get_logger(__name__)
+
+logger.info("Initializing intent guard agent")
 guard_agent = AgentBase(prompt=prompt, name=__name__)
+logger.debug("Intent guard agent initialized successfully")

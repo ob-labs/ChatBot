@@ -1,11 +1,20 @@
+import argparse
+import json
+
+import pyseekdb
 from tqdm import tqdm
 
-import os
-import json
-import dotenv
+from src.common.config import (
+    get_db_host,
+    get_db_name,
+    get_db_password_raw,
+    get_db_port,
+    get_db_user,
+    get_int_env,
+)
+from src.common.logger import get_logger
 
-dotenv.load_dotenv()
-import argparse
+logger = get_logger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -33,17 +42,18 @@ parser.add_argument(
     default=-1,
 )
 args = parser.parse_args()
+logger.info(f"Command line arguments: {args}")
 print("args", args)
 
-import pyseekdb
-
+logger.info("Connecting to database")
 client = pyseekdb.Client(
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT", "2881")),
-    database=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
+    host=get_db_host(),
+    port=get_int_env("DB_PORT", 2881),
+    database=get_db_name(),
+    user=get_db_user(),
+    password=get_db_password_raw(),
 )
+logger.info("Database connection established")
 
 output_fields = ["id", "embedding", "document", "metadata", "component_code"]
 
@@ -52,12 +62,15 @@ batch_size = min(args.batch_size, args.total) if args.total > 0 else args.batch_
 current_count = args.batch_size
 output_file = args.output_file
 
+logger.info(f"Extracting data from table: {args.table_name}")
 count_result = client.execute(f"SELECT COUNT(*) as cnt FROM {args.table_name}")
 count = count_result[0][0] if count_result else 0
+logger.info(f"Total records in table: {count}")
 progress = tqdm(total=count)
 
 values = []
 while current_count == batch_size:
+    logger.debug(f"Extracting batch: offset={offset}, batch_size={batch_size}")
     rows = client.execute(
         f"SELECT {', '.join(output_fields)} FROM {args.table_name} LIMIT {batch_size} OFFSET {offset} "
     )
@@ -67,7 +80,9 @@ while current_count == batch_size:
         values.append(
             {
                 "id": id,
-                "embedding": json.loads(embedding.decode()) if isinstance(embedding, bytes) else embedding,
+                "embedding": (
+                    json.loads(embedding.decode()) if isinstance(embedding, bytes) else embedding
+                ),
                 "document": document,
                 "metadata": json.loads(metadata) if isinstance(metadata, str) else metadata,
                 "component_code": comp_code,
@@ -76,8 +91,13 @@ while current_count == batch_size:
         progress.update(1)
     offset += current_count
     if args.total > 0 and len(values) >= args.total:
+        logger.info(f"Reached total limit: {args.total}")
         break
 
 if values:
-    with open(output_file, "w") as f:        
+    logger.info(f"Writing {len(values)} records to output file: {output_file}")
+    with open(output_file, "w") as f:
         f.write(json.dumps(values, indent=2))
+    logger.info(f"Successfully wrote data to {output_file}")
+else:
+    logger.warning("No values to write")

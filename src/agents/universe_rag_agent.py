@@ -18,7 +18,7 @@ prompt = """
 下面请根据上述要求直接给出你对于用户问题的回答。
 """
 
-prompt_en="""
+prompt_en = """
 You are an assistant focused on answering user questions.
 Your goal is to answer user questions using possible historical conversations and retrieved document snippets.
 Task description: Try to answer user questions based on possible historical conversations, user questions, and retrieved document snippets. If all documents cannot solve the user's question, first consider the rationality of the user's question. If the user's question is unreasonable, it needs to be corrected. If the user's question is reasonable but no relevant information can be found, apologize and give a possible answer based on internal knowledge. If the information in the document can answer the user's question, strictly answer the question based on the document information.
@@ -39,5 +39,10 @@ Please give your answer to the user's question directly according to the above r
 """
 
 from agents.base import AgentBase
+from src.common.logger import get_logger
 
+logger = get_logger(__name__)
+
+logger.info("Initializing universe RAG agent")
 universe_rag_agent = AgentBase(prompt=prompt, name=__name__)
+logger.debug("Universe RAG agent initialized successfully")

@@ -1,3 +1,7 @@
+from src.common.logger import get_logger
+
+logger = get_logger(__name__)
+
 tr = {
     "en": {
         "hello": "Hello, what can I do for you?",
@@ -73,6 +77,11 @@ tr = {
 
 
 def t(key: str, lang="en", *args) -> str:
+    if lang not in tr:
+        logger.warning(f"Language {lang} not found, falling back to 'en'")
+        lang = "en"
+    if key not in tr[lang]:
+        logger.warning(f"Translation key '{key}' not found for language '{lang}'")
     if len(args) > 0:
         return tr[lang].get(key, "").format(*args)
     return tr[lang].get(key, "")

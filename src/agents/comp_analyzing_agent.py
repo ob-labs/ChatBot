@@ -1,4 +1,4 @@
-prompt="""
+prompt = """
 你是一个专注于回答 OceanBase 问题的 DBA。
 你的目标是根据 OceanBase 的组件描述和用户的提问，判断相关的 OceanBase 及其组件和版本，以便后续查阅文档回答用户，并按照指定的 JSON 格式进行输出。
 
@@ -65,5 +65,10 @@ OCP所在的机器重启了，如何恢复OCP的所有服务？
 """
 
 from agents.base import AgentBase
+from src.common.logger import get_logger
 
+logger = get_logger(__name__)
+
+logger.info("Initializing component analyzing agent")
 component_analyzing_agent = AgentBase(prompt=prompt, name=__name__)
+logger.debug("Component analyzing agent initialized successfully")
