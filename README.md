@@ -92,7 +92,7 @@ Notes: If you are participating in the OceanBase AI Workshop, you can skip steps
 
 1. Install [Python 3.11+](https://www.python.org/downloads/) and [pip](https://pip.pypa.io/en/stable/installation/). If the version of Python on your machine is lower than 3.11, you can use Miniconda to create a new environment with Python 3.11. Refer to the [Miniconda installation guide](https://docs.anaconda.com/miniconda/install/) for details.
 
-2. Install [Poetry](https://python-poetry.org/docs/) with command `python3 -m pip install poetry`
+2. Install [uv](https://docs.astral.sh/uv/) with command `curl -LsSf https://astral.sh/uv/install.sh | sh` or `pip install uv`
 
 3. Install [Docker](https://docs.docker.com/engine/install/) (Optional, only required if you want to run OceanBase in a Docker container)
 
@@ -227,18 +227,16 @@ First of all, you need to change to the directory of the workshop project:
 cd ~/ai-workshop-2024
 ```
 
-We use Poetry to manage the dependencies of the chatbot project. You can install the dependencies with the following command:
+We use uv to manage the dependencies of the chatbot project. You can install the dependencies with the following command:
 
 ```bash
-poetry install
+uv sync
 ```
 
 If you are using the machine provided by the workshop, you will probably see the following message because the dependencies are already installed in the machine:
 
 ```bash
-Installing dependencies from lock file
-
-No dependencies to install or update
+Resolved 116 packages in 11.30s
 ```
 
 ### 3. Set up environment variables
@@ -307,7 +305,7 @@ Since some files in OceanBase's open-source documentation use `====` and `----` 
 
 ```bash
 # Convert document headings to standard markdown format
-poetry run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
+uv run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
 ```
 
 #### 5.3 Convert Documents to Vectors and Insert into OceanBase
@@ -318,7 +316,7 @@ In order to save time, we will only process a few documents related to vector re
 
 ```bash
 # Generate document vectors and metadata
-poetry run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
+uv run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
 ```
 
 While waiting for the text processing, we can examine the contents of `src/tools/embed_docs.py` to see how it works.
@@ -392,8 +390,8 @@ Execute the following command to start the chat UI:
 # Use the start script
 ./scripts/start.sh chat
 
-# Or run directly with poetry
-poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+# Or run directly with uv
+uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 Visit the URL displayed in the terminal to open the chatbot application UI.
@@ -420,16 +418,16 @@ Of course. You can insert new document data by running the `src/tools/embed_docs
 
 ```bash
 # This will embed all markdown files in the current directory, including README.md and LEGAL.md
-poetry run python src/tools/embed_docs.py --doc_base .
+uv run python src/tools/embed_docs.py --doc_base .
 
 # Or you can specify the table to insert data into
-poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
 Then you can specify the `TABLE_NAME` environment variable before launching the chat interface to specify which table the chatbot will query:
 
 ```bash
-TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 3. How to see the SQL statements executed by the database during embedding and retrieval?
@@ -437,7 +435,7 @@ TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/fronte
 When inserting documents yourself, you can set the `--echo` flag to see the SQL statements executed by the script:
 
 ```bash
-poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
 ```
 
 You will see output like this:
@@ -458,12 +456,12 @@ CREATE TABLE my_table (
 You can also set `ECHO=true` before launching the chat UI to see the SQL statements executed by the chat UI.
 
 ```bash
-ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+ECHO=true TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 4. Why don't changes to the .env file take effect after starting the UI service?
 
-If you edit the .env file or code files, you need to restart the UI service for the changes to take effect. You can terminate the service with `Ctrl + C`, then run `poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py` again to restart the service.
+If you edit the .env file or code files, you need to restart the UI service for the changes to take effect. You can terminate the service with `Ctrl + C`, then run `uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py` again to restart the service.
 
 ### 5. How to change the language of the chat UI?
 

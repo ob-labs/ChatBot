@@ -92,7 +92,7 @@ RAG 的主要优势有：
 
 1. 安装 [Python 3.11+](https://www.python.org/downloads/) 和 [pip](https://pip.pypa.io/en/stable/installation/)。如果您的机器上 Python 版本较低，可以使用 Miniconda 来创建新的 Python 3.11 及以上的环境，具体可参考 [Miniconda 安装指南](https://docs.anaconda.com/miniconda/install/)。
 
-2. 安装 [Poetry](https://python-poetry.org/docs/)，可参考命令 `python3 -m pip install poetry`
+2. 安装 [uv](https://docs.astral.sh/uv/)，可参考命令 `curl -LsSf https://astral.sh/uv/install.sh | sh` 或 `pip install uv`
 
 3. 安装 [Docker](https://docs.docker.com/engine/install/)（可选，如果您计划使用 Docker 在本地部署 OceanBase 数据库则必须安装）
 
@@ -227,10 +227,10 @@ mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
 cd ~/ai-workshop-2024
 ```
 
-我们使用 Poetry 来管理聊天机器人项目的依赖项。您可以使用以下命令安装依赖项：
+我们使用 uv 来管理聊天机器人项目的依赖项。您可以使用以下命令安装依赖项：
 
 ```bash
-poetry install
+uv sync
 ```
 
 如果您正在使用动手实战营提供的机器，您会看到以下消息，因为依赖都已经预先安装在了机器上：
@@ -307,7 +307,7 @@ git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oce
 
 ```bash
 # 把文档的标题转换为标准的 markdown 格式
-poetry run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
+uv run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
 ```
 
 #### 5.3 将文档转换为向量并插入 OceanBase 数据库
@@ -318,7 +318,7 @@ poetry run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-
 
 ```bash
 # 生成文档向量和元数据
-poetry run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
+uv run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
 ```
 
 在等待文本处理的过程中我们可以浏览 `src/tools/embed_docs.py` 的内容，观察它是如何工作的。
@@ -393,7 +393,7 @@ if args.doc_base is not None:
 ./scripts/start.sh chat
 
 # 或者直接使用 poetry 运行
-poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 访问终端中显示的 URL 来打开聊天机器人应用界面。
@@ -420,16 +420,16 @@ poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 
 ```bash
 # 这将在当前目录中嵌入所有 markdown 文件，其中包含 README.md 和 LEGAL.md
-poetry run python src/tools/embed_docs.py --doc_base .
+uv run python src/tools/embed_docs.py --doc_base .
 
 # 或者您可以指定要插入数据的表
-poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
 然后您可以在启动聊天界面之前指定 `TABLE_NAME` 环境变量，来指定聊天机器人将查询哪张表：
 
 ```bash
-TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 3. 如何查看嵌入和检索过程中数据库执行的操作？
@@ -437,7 +437,7 @@ TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/fronte
 当您自己插入文档时，可以设置 `--echo` 标志来查看脚本执行的 SQL 语句，如下所示：
 
 ```bash
-poetry run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
+uv run python src/tools/embed_docs.py --doc_base . --table_name my_table --echo
 ```
 
 您将看到以下输出：
@@ -458,12 +458,12 @@ CREATE TABLE my_table (
 您还可以在启动聊天界面之前设置 `ECHO=true`，以查看聊天界面执行的 SQL 语句。
 
 ```bash
-ECHO=true TABLE_NAME=my_table poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py
+ECHO=true TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 4. 为什么我在启动 UI 服务后再编辑 .env 文件不再生效？
 
-如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `poetry run streamlit run --server.runOnSave false src/frontend/chat_ui.py` 来重启服务。
+如果你编辑了 .env 文件或者是代码文件，需要重启 UI 服务才能生效。你可以通过 `Ctrl + C` 终止服务，然后重新运行 `uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py` 来重启服务。
 
 ### 5. 如何更改聊天界面的语言？
 
