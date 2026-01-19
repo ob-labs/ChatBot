@@ -127,7 +127,7 @@ class BGEEmbedding(Embeddings):
         try:
             from FlagEmbedding import BGEM3FlagModel
         except Exception as e:
-            print("Module FlagEmbedding not found, please execute `poetry add flagembedding` first")
+            print("Module FlagEmbedding not found, please execute `uv add flagembedding` first")
             exit(1)
         self.__model = BGEM3FlagModel(
             model_name_or_path=os.getenv("BGE_MODEL_PATH", "BAAI/bge-m3"),
