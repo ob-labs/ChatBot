@@ -1,55 +1,27 @@
-from typing import List, Union
+from langchain_ollama import OllamaEmbeddings
 
-import requests
-from langchain_core.embeddings import Embeddings
-
+from src.common.config import DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Default configuration
-DEFAULT_OLLAMA_MODEL = "bge-m3"
 
-
-class OllamaEmbedding(Embeddings):
+def create_ollama_embedding(
+    base_url: str = DEFAULT_OLLAMA_BASE_URL,
+    model: str = DEFAULT_OLLAMA_MODEL,
+) -> OllamaEmbeddings:
     """
-    Embedding class for Ollama API.
+    Create an OllamaEmbeddings instance.
+
+    Args:
+        base_url: Ollama server base URL (default: http://localhost:11434)
+        model: Model name (default: bge-m3)
+
+    Returns:
+        OllamaEmbeddings instance
     """
-
-    def __init__(self, url: str, token: str, model: str = DEFAULT_OLLAMA_MODEL):
-        """
-        Initialize Ollama embedding.
-
-        Args:
-            url: Ollama API URL
-            token: API token
-            model: Model name
-        """
-        logger.info(f"Initializing OllamaEmbedding with url: {url}, model: {model}")
-        self.url = url
-        self.model = model
-        self._token = token
-        logger.debug("OllamaEmbedding initialized successfully")
-
-    def embed_documents(
-        self,
-        texts: List[str],
-    ) -> Union[List[List[float]], List[dict[int, float]]]:
-        logger.debug(f"Embedding {len(texts)} documents using Ollama")
-        res = requests.post(
-            self.url,
-            json={"model": self.model, "input": texts},
-            headers={
-                "X-Token": self._token or "token",
-            },
-        )
-        if res.status_code != 200:
-            logger.error(f"Ollama embedding request failed with status {res.status_code}: {res.text}")
-            res.raise_for_status()
-        data = res.json()
-        logger.debug(f"Successfully embedded {len(texts)} documents")
-        return data["embeddings"]
-
-    def embed_query(self, text: str, **kwargs) -> Union[List[float], dict[int, float]]:
-        logger.debug(f"Embedding query text using Ollama, length: {len(text)}")
-        return self.embed_documents([text])[0]
+    logger.info(f"Creating OllamaEmbeddings with base_url: {base_url}, model: {model}")
+    return OllamaEmbeddings(
+        base_url=base_url,
+        model=model,
+    )

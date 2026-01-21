@@ -64,7 +64,7 @@ OCP所在的机器重启了，如何恢复OCP的所有服务？
 接下来开始吧!
 """
 
-from agents.base import AgentBase
+from src.agents.base import AgentBase
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)

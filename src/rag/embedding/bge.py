@@ -9,6 +9,9 @@ from src.common.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Maximum length for embedding
+MAX_LENGTH = 4096
+
 
 class BGEEmbedding(Embeddings):
     """
@@ -82,7 +85,7 @@ class BGEEmbedding(Embeddings):
         embed_res = self.__model.encode(
             texts,
             batch_size=1,
-            max_length=512,
+            max_length=MAX_LENGTH,
             return_dense=do_dense,
             return_sparse=do_sparse,
             return_colbert_vecs=False,

@@ -341,7 +341,7 @@ vs = OceanBase(
     partitions=ObListPartition(
         is_list_columns=False,
         list_part_infos=[RangeListPartInfo(k, v) for k, v in cm.items()]
-        + [RangeListPartInfo("p10", "DEFAULT")],
+        + [RangeListPartInfo("default", "DEFAULT")],
         list_expr="component_code",
     ),
     echo=args.echo,

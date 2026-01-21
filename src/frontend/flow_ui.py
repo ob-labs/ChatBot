@@ -1,655 +1,1073 @@
-import json
+"""
+Flow UI module for the document RAG chatbot.
+
+This module provides a step-by-step wizard interface for:
+1. View current configuration status
+2. Configure Chat LLM settings
+3. Configure Embedding LLM settings
+4. Configure RAG parser settings
+5. Upload and load documents
+"""
+
 import os
-import time
-import uuid
-from typing import Iterator, Optional, Union
+import shutil
+from typing import Callable, List, Optional
 
 import dotenv
-from langchain_core.messages import BaseMessageChunk
-from langchain_oceanbase.vectorstores import OceanbaseVectorStore
+import streamlit as st
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+
+from src.common.compress import extract_archive, is_archive_file
+from src.common.file_path import is_markdown_file
+from src.common.download import clone_github_repo
+from src.common.config import (
+    DEFAULT_TABLE_NAME,
+    FLOW_UI_PAGE_TITLE,
+    UI_LOGO_PATH,
+    UI_PAGE_ICON,
+    EmbeddedType,
+    EmbeddingConfig,
+    LLMConfig,
+    RAGParserConfig,
+    get_db_host,
+    get_db_name,
+    get_db_password_raw,
+    get_db_port,
+    get_db_user,
+    get_env,
+    get_table_name,
+    get_ui_lang,
+)
+from src.common.db import (
+    ConnectionParams,
+    DatabaseClient,
+    append_partition,
+    get_partition_map,
+)
+from src.common.logger import get_logger
+from src.frontend.i18n import t
+from src.frontend.menu import MenuNavigator
+from src.rag.rag import DocumentEmbedder
+from src.rag.ob import component_mapping, supported_components
+from src.rag.embedding.base import DEFAULT_EMBEDDING_MODEL_NAME
 
 dotenv.load_dotenv()
 
-import streamlit as st
-
-from src.agents.base import AgentBase
-from src.agents.universe_rag_agent import prompt as universal_rag_prompt
-from src.common.logger import get_logger
-from src.rag.documents import parse_md
-from src.rag.embedding import OllamaEmbedding
-
 logger = get_logger(__name__)
 
-# Configuration constants
-STATE_FILE_PATH = "./data/uploaded/state.json"
-DOCS_DIR = "./data/uploaded/docs"
-DEFAULT_BATCH_SIZE = 10
-REF_TIP = "\n\n检索到的相关文档如下:"
-DEFAULT_LLM_MODEL = "glm-4-flash"
-DEFAULT_LLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
-DEFAULT_CHAT_HISTORY_LEN = 4
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Directory paths
+DATA_DIR = "./data"
+UPLOADED_DIR = os.path.join(DATA_DIR, "uploaded")
+LOADED_DIR = os.path.join(DATA_DIR, "loaded")
+TMP_DIR = os.path.join(DATA_DIR, "tmp")
+
+# Flow steps
+FLOW_STEP_STATUS = 0
+FLOW_STEP_CHAT_LLM = 1
+FLOW_STEP_EMBED_LLM = 2
+FLOW_STEP_RAG_PARSER = 3
+FLOW_STEP_UPLOAD = 4
 
 
-def init_state():
-    """
-    Initialize the session state with default values.
-    """
-    logger.debug("Initializing session state")
-    st.session_state.step = 0
-    st.session_state.table = ""
-    st.session_state.connection = {}
+# =============================================================================
+# Data Classes
+# =============================================================================
 
 
-def save_state():
-    """
-    Save the current session state to a JSON file.
-    """
-    logger.debug(f"Saving session state to {STATE_FILE_PATH}")
-    try:
-        with open(STATE_FILE_PATH, "w") as f:
-            d = {
-                "step": st.session_state.step,
-                "table": st.session_state.table,
-                "connection": st.session_state.connection,
-            }
-            json.dump(d, f)
-        logger.debug("Session state saved successfully")
-    except Exception as e:
-        logger.error(f"Failed to save session state: {e}")
+class StepDefinition(BaseModel):
+    """Represents a step in the flow UI."""
+    name_key: str
+    desc_key: Optional[str] = None
+
+    def get_name(self, lang: str) -> str:
+        """Get translated step name."""
+        return t(self.name_key, lang)
+
+    def get_desc(self, lang: str) -> str:
+        """Get translated step description."""
+        return t(self.desc_key, lang) if self.desc_key else ""
 
 
-def load_state():
-    """
-    Load session state from a JSON file if it exists.
-    """
-    if os.path.exists(STATE_FILE_PATH):
-        logger.debug(f"Loading session state from {STATE_FILE_PATH}")
-        try:
-            with open(STATE_FILE_PATH, "r") as f:
-                d = json.load(f)
-                st.session_state.update(d)
-            logger.debug("Session state loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load session state: {e}")
-    else:
-        logger.debug("No saved session state found")
-
-
-# Initialize session state
-if "step" not in st.session_state:
-    logger.info("Initializing new session state")
-    init_state()
-
-# Load saved state
-load_state()
-logger.info("Flow UI module loaded")
-
-
-class StreamResponse:
-    """
-    Helper class for streaming chatbot responses.
-
-    Accumulates message chunks and provides methods to generate
-    the response stream with optional prefix/suffix iterators.
-    """
-
-    def __init__(self, chunks: Iterator[BaseMessageChunk] = []):
-        """
-        Initialize StreamResponse with message chunks.
-
-        Args:
-            chunks: Iterator of BaseMessageChunk objects
-        """
-        self.chunks = chunks
-        self.__whole_msg = ""
-
-    def generate(
-        self,
-        *,
-        prefix: Union[Iterator, None] = None,
-        suffix: Union[Iterator, None] = None,
-    ) -> Iterator[str]:
-        """
-        Generate response stream with optional prefix and suffix iterators.
-
-        Args:
-            prefix: Optional iterator to yield before chunks
-            suffix: Optional iterator to yield after chunks
-
-        Yields:
-            Response text chunks as strings
-        """
-        if prefix:
-            for pre in prefix:
-                yield pre
-        for chunk in self.chunks:
-            self.__whole_msg += chunk.content
-            yield chunk.content
-        if suffix:
-            for suf in suffix:
-                yield suf
-
-    def get_whole(self) -> str:
-        """
-        Get the complete accumulated message.
-
-        Returns:
-            Complete message as string
-        """
-        return self.__whole_msg
-
-
-def remove_refs(history: list[dict]) -> list[dict]:
-    """
-    Remove reference sections from chat history.
-
-    This prevents the model from generating its own reference list
-    by removing content after the reference marker.
-
-    Args:
-        history: List of message dictionaries
-
-    Returns:
-        List of messages with references removed
-    """
-    return [
-        {
-            "role": msg["role"],
-            "content": msg["content"].split(REF_TIP)[0],
-        }
-        for msg in history
-    ]
-
-
-def get_engine(**connection_params):
-    """
-    Create a SQLAlchemy engine from connection parameters.
-
-    Args:
-        **connection_params: Database connection parameters including:
-            - user: Database username
-            - password: Database password
-            - host: Database host
-            - port: Database port
-            - db_name: Database name
-
-    Returns:
-        SQLAlchemy engine instance
-    """
-    return create_engine(
-        f"mysql+pymysql://{connection_params['user']}:{connection_params['password']}"
-        f"@{connection_params['host']}:{connection_params['port']}"
-        f"/{connection_params['db_name']}"
-    )
-
-
-# Initialize embeddings (using hardcoded values - consider moving to config)
-embeddings = OllamaEmbedding(
-    url="http://30.249.224.105:8080/api/embed",
-    token="test",
-)
-
-
-def step_forward():
-    """
-    Move to the next step in the flow and save state.
-    """
-    st.session_state.step += 1
-    save_state()
-    st.rerun()
-
-
-def step_back():
-    """
-    Move to the previous step in the flow and save state.
-    """
-    st.session_state.step -= 1
-    save_state()
-    st.rerun()
-
-
-class Step(BaseModel):
-    """
-    Represents a step in the flow UI.
-
-    Attributes:
-        name: Step name
-        desc: Step description
-        form: Optional form configuration
-    """
-
-    name: str
-    desc: Optional[str] = None
-    form: Optional[dict] = None
-
-
-# Define flow steps
-steps: list[Step] = [
-    Step(
-        name="Database Connection",
-        desc="Fill in the database connection information.",
+# Define all flow steps with translation keys
+FLOW_STEPS: list[StepDefinition] = [
+    StepDefinition(
+        name_key="flow_step_status",
+        desc_key="flow_step_status_desc",
     ),
-    Step(
-        name="Table Selection",
-        desc="Select the table you want to chat with.",
+    StepDefinition(
+        name_key="flow_step_chat_llm",
+        desc_key="flow_step_chat_llm_desc",
     ),
-    Step(
-        name="Upload Data",
-        desc="Upload the data you want to retrieve with. Should be in format of .md",
+    StepDefinition(
+        name_key="flow_step_embedding",
+        desc_key="flow_step_embedding_desc",
     ),
-    Step(
-        name="Start Chatting",
-        desc="Now you can start chatting with the chatbot.",
+    StepDefinition(
+        name_key="flow_step_rag_parser",
+        desc_key="flow_step_rag_parser_desc",
+    ),
+    StepDefinition(
+        name_key="flow_step_upload",
+        desc_key="flow_step_upload_desc",
     ),
 ]
 
 
-def render_sidebar():
+# =============================================================================
+# State Management
+# =============================================================================
+
+
+class StateManager:
     """
-    Render the sidebar with navigation controls.
+    Manages session state persistence and operations.
+
+    Configuration classes (LLMConfig, EmbeddingConfig, RAGParserConfig)
+    automatically load from .env file via their from_env() methods.
     """
-    st.title("Flow UI")
-    st.markdown(
-        """
-        This is a simple flow UI for the chatbot. You can follow the steps to chat with the chatbot.
-        """
-    )
-    st.markdown(
-        """
-        **Note:** The chatbot will only work with the selected table.
-        """
-    )
-    if st.button("Reset", use_container_width=True):
-        init_state()
-        if os.path.exists(STATE_FILE_PATH):
-            os.remove(STATE_FILE_PATH)
-        if os.path.exists(DOCS_DIR):
-            for root, _, files in os.walk(DOCS_DIR):
-                for file in files:
-                    os.remove(os.path.join(root, file))
-    if st.session_state.get("step", 0) > 0:
-        if st.button(
-            "Back",
-            key="sidebar_back",
-            icon="👈🏻",
-            use_container_width=True,
-        ):
-            step_back()
 
+    def __init__(self):
+        """Initialize state manager."""
+        self._ensure_session_state()
 
-def render_progress():
-    """
-    Render the progress bar and current step information.
-    """
-    current_step = steps[st.session_state.step]
-    progress_text = current_step.name
-    st.progress(
-        (st.session_state.step + 1) / len(steps),
-        text=f"Step {st.session_state.step + 1} / {len(steps)}: {progress_text}",
-    )
-    st.info(current_step.desc)
+    def _ensure_session_state(self) -> None:
+        """Ensure session state has required keys."""
+        if "step" not in st.session_state:
+            logger.info("Initializing new session state")
+            self.reset()
+        if "state_manager" not in st.session_state:
+            self._init_state_from_env()
 
+    def _init_state_from_env(self) -> None:
+        """Initialize state using config classes that load from .env."""
+        logger.info("Initializing state from config classes")
 
-# Initialize page
-st.set_page_config(
-    page_title="Flow UI",
-    page_icon="./demo/ob-icon.png",
-)
-st.logo("./demo/logo.png")
+        # Config classes load from .env via their from_env() methods
+        chat_llm_config = LLMConfig.from_env()
+        embedding_config = EmbeddingConfig.from_env()
+        rag_parser_config = RAGParserConfig.from_env()
 
-# Render sidebar
-with st.sidebar:
-    render_sidebar()
+        # Store in session state
+        st.session_state.state_manager = {
+            "chat_llm_config": chat_llm_config.model_dump(),
+            "embedding_config": embedding_config.model_dump(),
+            "rag_parser_config": rag_parser_config.model_dump(),
+        }
 
-# Render progress
-render_progress()
+        # Database connection
+        st.session_state.connection = {
+            "host": get_db_host(),
+            "port": get_db_port(),
+            "user": get_db_user(),
+            "password": get_db_password_raw(),
+            "db_name": get_db_name(),
+        }
+        st.session_state.table = get_table_name()
 
+    def reset(self) -> None:
+        """Reset session state to default values."""
+        logger.debug("Resetting session state")
+        st.session_state.step = FLOW_STEP_STATUS
+        if "state_manager" in st.session_state:
+            del st.session_state.state_manager
+        self._init_state_from_env()
 
-def render_database_connection_step():
-    """
-    Render step 0: Database connection configuration.
-    """
-    st.header("Database Connection")
-    connection = st.session_state.get("connection", {})
-    host = st.text_input(
-        label="Host",
-        value=connection.get("host", "127.0.0.1"),
-        placeholder="Database host, e.g. 127.0.0.1",
-    )
-    port = st.text_input(
-        label="Port",
-        value=connection.get("port", "2881"),
-        placeholder="Database port, e.g. 2881",
-    )
-    user = st.text_input(
-        label="User",
-        value=connection.get("user", "root@test"),
-        placeholder="Database user, e.g. root@test",
-    )
-    db_password = st.text_input(
-        label="Password",
-        type="password",
-        value=connection.get("password", ""),
-        placeholder="Database password, empty if no password.",
-    )
-    db_name = st.text_input(
-        label="Database",
-        value=connection.get("database", "test"),
-        placeholder="Database name, e.g. test",
-    )
-    connection_params = {
-        "host": host,
-        "port": port,
-        "user": user,
-        "password": db_password,
-        "db_name": db_name,
-    }
-    required_values = [host, port, user, db_name]
-    if st.button("Submit", type="primary"):
-        if not all(required_values):
-            st.error("Please fill in all the fields except password.")
-            st.stop()
-        try:
-            engine = get_engine(**connection_params)
-            with engine.connect() as conn:
-                result = conn.execute(text("SELECT 1"))
-                if result.scalar() == 1:
-                    st.session_state.connection = connection_params
-                    step_forward()
-                else:
-                    st.error("Connection failed.")
-        except Exception as e:
-            st.error(f"Connection failed: {e}")
-
-
-def render_table_selection_step():
-    """
-    Render step 1: Table selection or creation.
-    """
-    st.header("Table Selection")
-    connection = st.session_state.connection
-    engine = get_engine(**connection)
-
-    with engine.connect() as conn:
-        tables = []
-        for row in conn.execute(text("SHOW TABLES")):
-            tables.append(row[0])
-
-        selecting = st.toggle("Select Table")
-        if selecting:
-            table = st.selectbox("Table", tables)
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
-            st.caption(f"Number of rows in table {table}: {count}")
-            st.caption(f"Structure of table {table}:")
-            st.table(conn.execute(text(f"DESC {table}")).fetchall())
-
-        table = st.text_input(
-            "Create Table",
-            value=st.session_state.table,
-            placeholder="Input table name to create the table if not exists.",
-            disabled=selecting,
-        )
-    col1, col2 = st.columns(2)
-    if col1.button(
-        "Back",
-        icon="👈🏻",
-        use_container_width=True,
-    ):
-        step_back()
-    if col2.button(
-        "Submit",
-        type="primary",
-        icon="📤",
-        use_container_width=True,
-    ):
-        if not table:
-            st.error("Please input or select a table.")
-            st.stop()
-        st.session_state.table = table
-        step_forward()
-
-
-def render_upload_data_step():
-    """
-    Render step 2: Upload and process markdown documents.
-    """
-    st.header("Upload Data")
-    connection = st.session_state.connection
-    uploaded_file = st.file_uploader(
-        "Choose a file",
-        accept_multiple_files=True,
-        type=["md"],
-    )
-    vs = OceanbaseVectorStore(
-        embedding_function=embeddings,
-        table_name=st.session_state.table,
-        connection_args=connection,
-        metadata_field="metadata",
-    )
-    if not os.path.exists(DOCS_DIR):
-        os.makedirs(DOCS_DIR)
-    files = list(filter(lambda x: x.endswith(".md"), os.listdir(DOCS_DIR)))
-    if len(files) > 0:
-        st.caption(f"Uploaded {len(files)} files")
-    col1, col2, col3, col4 = st.columns(4)
-    if col1.button(
-        "Back",
-        icon="👈🏻",
-        use_container_width=True,
-    ):
-        step_back()
-    if uploaded_file is not None and col2.button(
-        "Submit",
-        icon="📤",
-        type="primary",
-        use_container_width=True,
-    ):
-        for file in uploaded_file:
-            with open(
-                os.path.join(DOCS_DIR, file.name),
-                "wb",
-            ) as f:
-                f.write(file.getvalue())
-        st.success("Files uploaded successfully.")
+    def step_forward(self) -> None:
+        """Move to the next step."""
+        st.session_state.step += 1
         st.rerun()
-    if col3.button("Process", icon="⚙️", type="primary", use_container_width=True):
-        total = len(files)
-        batch = []
-        bar = st.progress(0, text="Processing files")
-        for i, file in enumerate(files):
-            bar.progress((i + 1) / total, text=f"Processing {file}")
-            for doc in parse_md(os.path.join(DOCS_DIR, file)):
-                batch.append(doc)
-                if len(batch) == DEFAULT_BATCH_SIZE:
-                    vs.add_documents(
-                        batch,
-                        ids=[str(uuid.uuid4()) for _ in range(len(batch))],
-                    )
-                    batch = []
-        if batch:
-            vs.add_documents(
-                batch,
-                ids=[str(uuid.uuid4()) for _ in range(len(batch))],
-            )
-        st.success("Files processed successfully.")
-    if col4.button(
-        "Next",
-        icon="👉🏻",
-        use_container_width=True,
-    ):
-        step_forward()
 
-
-if st.session_state.step == 0:
-    render_database_connection_step()
-elif st.session_state.step == 1:
-    render_table_selection_step()
-elif st.session_state.step == 2:
-    render_upload_data_step()
-elif st.session_state.step == 3:
-    print(st.session_state)
-    st.header("Upload Data")
-    c = st.session_state.connection
-    uploaded_file = st.file_uploader(
-        "Choose a file",
-        accept_multiple_files=True,
-        type=["md"],
-    )
-    vs = OceanbaseVectorStore(
-        embedding_function=embeddings,
-        table_name=st.session_state.table,
-        connection_args=c,
-        metadata_field="metadata",
-    )
-    if not os.path.exists("data/uploaded/docs"):
-        os.makedirs("data/uploaded/docs")
-    files = list(filter(lambda x: x.endswith(".md"), os.listdir("data/uploaded/docs")))
-    if len(files) > 0:
-        st.caption(f"Uploaded {len(files)} files")
-    col1, col2, col3, col4 = st.columns(4)
-    if col1.button(
-        "Back",
-        icon="👈🏻",
-        use_container_width=True,
-    ):
-        step_back()
-    if uploaded_file is not None and col2.button(
-        "Submit",
-        icon="📤",
-        type="primary",
-        use_container_width=True,
-    ):
-        for file in uploaded_file:
-            with open(
-                os.path.join(
-                    "data/uploaded",
-                    "docs",
-                    file.name,
-                ),
-                "wb",
-            ) as f:
-                f.write(file.getvalue())
-        st.success("Files uploaded successfully.")
+    def step_back(self) -> None:
+        """Move to the previous step."""
+        st.session_state.step -= 1
         st.rerun()
-    if col3.button("Process", icon="⚙️", type="primary", use_container_width=True):
-        total = len(files)
-        batch = []
-        bar = st.progress(0, text="Processing files")
-        for i, file in enumerate(files):
-            bar.progress((i + 1) / total, text=f"Processing {file}")
-            for doc in parse_md(os.path.join("data/uploaded", "docs", file)):
-                batch.append(doc)
-                if len(batch) == 10:
-                    vs.add_documents(
-                        batch,
-                        ids=[str(uuid.uuid4()) for _ in range(len(batch))],
-                    )
-                    batch = []
-        if batch:
-            vs.add_documents(
-                batch,
-                ids=[str(uuid.uuid4()) for _ in range(len(batch))],
-            )
-        st.success("Files processed successfully.")
-    if col4.button(
-        "Next",
-        icon="👉🏻",
-        use_container_width=True,
-    ):
-        step_forward()
+
+    def go_to_step(self, step: int) -> None:
+        """Go to a specific step."""
+        st.session_state.step = step
+        st.rerun()
+
+    @property
+    def current_step(self) -> int:
+        """Get current step index."""
+        return st.session_state.get("step", FLOW_STEP_STATUS)
+
+    @property
+    def chat_llm_config(self) -> LLMConfig:
+        """Get chat LLM configuration."""
+        data = st.session_state.state_manager.get("chat_llm_config", {})
+        return LLMConfig.model_validate(data)
+
+    @chat_llm_config.setter
+    def chat_llm_config(self, config: LLMConfig) -> None:
+        """Set chat LLM configuration."""
+        st.session_state.state_manager["chat_llm_config"] = config.model_dump()
+
+    @property
+    def embedding_config(self) -> EmbeddingConfig:
+        """Get embedding configuration."""
+        data = st.session_state.state_manager.get("embedding_config", {})
+        return EmbeddingConfig.model_validate(data)
+
+    @embedding_config.setter
+    def embedding_config(self, config: EmbeddingConfig) -> None:
+        """Set embedding configuration."""
+        st.session_state.state_manager["embedding_config"] = config.model_dump()
+
+    @property
+    def rag_parser_config(self) -> RAGParserConfig:
+        """Get RAG parser configuration."""
+        data = st.session_state.state_manager.get("rag_parser_config", {})
+        return RAGParserConfig.model_validate(data)
+
+    @rag_parser_config.setter
+    def rag_parser_config(self, config: RAGParserConfig) -> None:
+        """Set RAG parser configuration."""
+        st.session_state.state_manager["rag_parser_config"] = config.model_dump()
+
+    @property
+    def table_name(self) -> str:
+        """Get selected table name."""
+        return st.session_state.get("table", "")
+
+    def get_connection_params(self) -> ConnectionParams:
+        """Get connection parameters as ConnectionParams object."""
+        conn = st.session_state.get("connection", {})
+        return ConnectionParams.from_dict(conn)
+
+    def get_db_client(self) -> DatabaseClient:
+        """Get database client with current connection params."""
+        return DatabaseClient(self.get_connection_params())
 
 
-def render_chat_step():
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
+def get_lang() -> str:
+    """Get current UI language."""
+    return get_ui_lang()
+
+
+def ensure_directories() -> None:
+    """Ensure all required directories exist."""
+    for dir_path in [UPLOADED_DIR, LOADED_DIR, TMP_DIR]:
+        os.makedirs(dir_path, exist_ok=True)
+
+
+def get_loaded_modules() -> List[dict]:
     """
-    Render step 3: Chat interface with the chatbot.
+    Get list of loaded modules from loaded directory.
+
+    Returns:
+        List of dicts with module info (name, path, file_count)
     """
-    with st.container(border=1):
-        if st.button(
-            "Back",
-            icon="👈🏻",
-            use_container_width=True,
-        ):
-            step_back()
-        st.caption(
-            "If you want to use other LLM vendors compatible with OpenAI API, "
-            "please modify the following fields. The default settings are for "
-            "[ZhipuAI](https://bigmodel.cn)."
+    modules = []
+    if not os.path.exists(LOADED_DIR):
+        return modules
+
+    for name in os.listdir(LOADED_DIR):
+        module_path = os.path.join(LOADED_DIR, name)
+        if os.path.isdir(module_path):
+            # Count markdown files
+            file_count = 0
+            for root, _, files in os.walk(module_path):
+                file_count += sum(1 for f in files if is_markdown_file(f))
+            modules.append({
+                "name": name,
+                "path": module_path,
+                "file_count": file_count,
+            })
+    return modules
+
+
+
+
+# =============================================================================
+# UI Components
+# =============================================================================
+
+
+class PageConfigurator:
+    """Handles page-level configuration."""
+
+    @staticmethod
+    def setup() -> None:
+        """Configure Streamlit page settings."""
+        st.set_page_config(page_title=FLOW_UI_PAGE_TITLE, page_icon=UI_PAGE_ICON)
+        st.logo(UI_LOGO_PATH)
+        # Apply menu CSS
+        menu_nav = MenuNavigator()
+        menu_nav.apply_css()
+
+
+class SidebarRenderer:
+    """Renders the sidebar with navigation controls."""
+
+    def __init__(self, state_manager: StateManager):
+        """Initialize sidebar renderer."""
+        self._state = state_manager
+        self._lang = get_lang()
+
+    def render(self) -> None:
+        """Render the sidebar."""
+        with st.sidebar:
+            self._render_header()
+            # Use a unique key to avoid duplicate key errors
+            if st.button(t("flow_reset_config", self._lang), key="flow_ui_sidebar_reset_config", use_container_width=True):
+                self._state.reset()
+                st.rerun()
+
+    def _render_header(self) -> None:
+        """Render sidebar header."""
+        st.title(t("flow_sidebar_title", self._lang))
+        st.markdown(t("flow_sidebar_desc", self._lang))
+
+
+class ProgressRenderer:
+    """Renders the progress indicator."""
+
+    def __init__(self, state_manager: StateManager):
+        """Initialize progress renderer."""
+        self._state = state_manager
+        self._lang = get_lang()
+
+    def render(self) -> None:
+        """Render progress bar and current step info."""
+        current_step = FLOW_STEPS[self._state.current_step]
+        total_steps = len(FLOW_STEPS)
+
+        progress_text = t("flow_step_progress", self._lang).format(
+            self._state.current_step + 1, total_steps, current_step.get_name(self._lang)
         )
-        llm_model = st.text_input("Model", value=DEFAULT_LLM_MODEL)
-        llm_base_url = st.text_input(
+        st.progress(
+            (self._state.current_step + 1) / total_steps,
+            text=progress_text,
+        )
+        st.info(current_step.get_desc(self._lang))
+
+
+# =============================================================================
+# Step Renderers
+# =============================================================================
+
+
+class StepRendererBase:
+    """Base class for step renderers."""
+
+    def __init__(self, state_manager: StateManager):
+        """Initialize step renderer."""
+        self._state = state_manager
+        self._lang = get_lang()
+
+    def render(self) -> None:
+        """Render the step. Override in subclasses."""
+        raise NotImplementedError
+
+    def _render_navigation_buttons(
+        self,
+        show_back: bool = True,
+        show_next: bool = True,
+        next_label: Optional[str] = None,
+        next_callback: Optional[Callable[[], bool]] = None,
+    ) -> None:
+        """Render navigation buttons."""
+        if next_label is None:
+            next_label = t("flow_next_step", self._lang)
+        cols = st.columns(2 if show_back and show_next else 1)
+
+        if show_back and self._state.current_step > 0:
+            if cols[0].button(t("flow_prev_step", self._lang), use_container_width=True):
+                self._state.step_back()
+
+        if show_next:
+            col_idx = 1 if show_back else 0
+            if cols[col_idx].button(
+                f"➡️ {next_label}",
+                type="primary",
+                use_container_width=True,
+            ):
+                if next_callback is None or next_callback():
+                    self._state.step_forward()
+
+
+class StatusStep(StepRendererBase):
+    """Renders the status overview step."""
+
+    def render(self) -> None:
+        """Render status overview."""
+        st.header(t("flow_status_header", self._lang))
+
+        # Chat LLM Settings
+        st.subheader(t("flow_chat_llm_settings", self._lang))
+        chat_config = self._state.chat_llm_config
+        col1, col2, col3 = st.columns(3)
+        col1.write(f"**API Key:** {t('flow_status_set', self._lang) if chat_config.api_key else t('flow_status_not_set', self._lang)}")
+        col2.write(f"**Model:** {chat_config.model or t('flow_status_not_configured', self._lang)}")
+        base_url_display = chat_config.base_url[:30] + "..." if len(chat_config.base_url) > 30 else chat_config.base_url or t("flow_status_not_configured", self._lang)
+        col3.write(f"**Base URL:** {base_url_display}")
+
+        # Embedding LLM Settings
+        st.subheader(t("flow_embedding_settings", self._lang))
+        embed_config = self._state.embedding_config
+
+        col1, col2, col3 = st.columns(3)
+        col1.write(f"**Embedding Type:** {embed_config.embedded_type.value}")
+
+        if embed_config.embedded_type == EmbeddedType.DEFAULT:
+            col2.write(f"**{t('flow_default_model', self._lang)}:** {DEFAULT_EMBEDDING_MODEL_NAME}")
+        elif embed_config.embedded_type == EmbeddedType.LOCAL_MODEL:
+            col2.write(f"**{t('flow_local_model', self._lang)}:** {embed_config.model or t('flow_status_not_configured', self._lang)}")
+        elif embed_config.embedded_type == EmbeddedType.OLLAMA:
+            # Ollama only needs model and base_url, no api_key
+            col2.write(f"**Model:** {embed_config.model or t('flow_status_not_configured', self._lang)}")
+        else:  # OpenAI_Embedding
+            col2.write(f"**API Key:** {t('flow_status_set', self._lang) if embed_config.api_key else t('flow_status_not_set', self._lang)}")
+
+        col3.write(f"**Dimension:** {embed_config.dimension}")
+
+        # RAG Parser Settings
+        st.subheader(t("flow_rag_settings", self._lang))
+        rag_config = self._state.rag_parser_config
+        col1, col2, col3 = st.columns(3)
+        col1.write(f"**Max Chunk Size:** {rag_config.max_chunk_size}")
+        col2.write(f"**Limit:** {rag_config.limit if rag_config.limit > 0 else t('flow_unlimited', self._lang)}")
+        col3.write(f"**Skip Patterns:** {rag_config.skip_patterns or t('flow_none', self._lang)}")
+
+        # Loaded Modules
+        st.subheader(t("flow_loaded_modules", self._lang))
+        modules = get_loaded_modules()
+        if modules:
+            for module in modules:
+                with st.expander(f"📁 {module['name']}"):
+                    st.write(f"**{t('flow_dir_path', self._lang)}** {module['path']}")
+                    st.write(f"**{t('flow_file_count', self._lang)}** {module['file_count']}")
+        else:
+            st.info(t("flow_no_modules", self._lang))
+
+        # Navigation
+        st.markdown("---")
+        self._render_navigation_buttons(show_back=False)
+
+
+class ChatLLMStep(StepRendererBase):
+    """Renders Chat LLM configuration step."""
+
+    def render(self) -> None:
+        """Render Chat LLM configuration."""
+        st.header(t("flow_chat_llm_header", self._lang))
+
+        config = self._state.chat_llm_config
+
+        st.info(t("flow_chat_llm_info", self._lang))
+
+        api_key = st.text_input(
+            "API Key",
+            value=config.api_key,
+            type="password",
+            help=t("flow_api_key_help", self._lang),
+        )
+
+        model = st.text_input(
+            "Model",
+            value=config.model,
+            help=t("flow_model_help", self._lang),
+        )
+
+        base_url = st.text_input(
             "Base URL",
-            value=DEFAULT_LLM_BASE_URL,
-        )
-        llm_api_key = st.text_input("API Key", type="password")
-
-    # Initialize chat messages
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = [
-            {"role": "assistant", "content": "Hello! How can I help you today?"}
-        ]
-
-    # Display chat history
-    AVATAR_MAP = {
-        "assistant": "🤖",
-        "user": "👨🏻‍💻",
-    }
-    for msg in st.session_state.messages:
-        avatar = AVATAR_MAP.get(msg["role"], "🤖")
-        st.chat_message(msg["role"], avatar=avatar).write(msg["content"])
-
-    # Initialize vector store
-    vs = OceanbaseVectorStore(
-        embedding_function=embeddings,
-        table_name=st.session_state.table,
-        connection_args=st.session_state.connection,
-        metadata_field="metadata",
-    )
-
-    # Handle user input
-    if prompt := st.chat_input("Ask something..."):
-        st.chat_message("user", avatar=AVATAR_MAP["user"]).write(prompt)
-
-        # Get recent chat history
-        history = st.session_state["messages"][-DEFAULT_CHAT_HISTORY_LEN:]
-
-        # Search for relevant documents
-        docs = vs.similarity_search(prompt)
-        docs_content = "\n=====\n".join([f"文档片段:\n\n" + chunk.page_content for chunk in docs])
-
-        # Create RAG agent and stream response
-        universal_rag_agent = AgentBase(
-            prompt=universal_rag_prompt,
-            llm_model=llm_model or DEFAULT_LLM_MODEL,
-        )
-        ans_itr = universal_rag_agent.stream(
-            prompt,
-            history,
-            document_snippets=docs_content,
-        )
-        res = StreamResponse(ans_itr)
-
-        # Add user message to history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-
-        # Build reference list
-        def ref_generator():
-            yield REF_TIP
-            visited = set()
-            for chunk in docs:
-                if chunk.metadata["doc_url"] not in visited:
-                    visited.add(chunk.metadata["doc_url"])
-                    yield f"\n* [{chunk.metadata['doc_name']}]({chunk.metadata['doc_url']})"
-
-        # Display assistant response
-        st.chat_message("assistant", avatar=AVATAR_MAP["assistant"]).write_stream(
-            res.generate(suffix=ref_generator())
+            value=config.base_url,
+            help=t("flow_base_url_help", self._lang),
         )
 
-        # Add assistant response to history
-        st.session_state.messages.append({"role": "assistant", "content": res.get_whole()})
+        # Update config in session state
+        new_config = LLMConfig(api_key=api_key, model=model, base_url=base_url)
+        self._state.chat_llm_config = new_config
+
+        # Navigation
+        st.markdown("---")
+
+        def validate() -> bool:
+            if not new_config.is_valid():
+                st.error(t("flow_fill_all_fields", self._lang))
+                return False
+            return True
+
+        self._render_navigation_buttons(next_callback=validate)
 
 
-if st.session_state.step == 3:
-    render_chat_step()
+class EmbeddingLLMStep(StepRendererBase):
+    """Renders Embedding LLM configuration step."""
+
+    def render(self) -> None:
+        """Render Embedding LLM configuration."""
+        st.header(t("flow_embedding_header", self._lang))
+
+        embed_config = self._state.embedding_config
+
+        # Embedding type selection
+        type_options = [e.value for e in EmbeddedType]
+        selected_type = st.selectbox(
+            "Embedding Type",
+            options=type_options,
+            index=type_options.index(embed_config.embedded_type.value),
+            help=t("flow_embedding_type_help", self._lang),
+        )
+        new_embed_type = EmbeddedType(selected_type)
+
+        st.markdown("---")
+
+        # Initialize variables for config creation
+        api_key = ""
+        model = ""
+        base_url = ""
+
+        # Configuration based on type
+        if new_embed_type == EmbeddedType.DEFAULT:
+            st.info(t("flow_default_embedding_model", self._lang).format(DEFAULT_EMBEDDING_MODEL_NAME))
+            st.caption(t("flow_default_embedding_note", self._lang))
+
+            # Show disabled inputs
+            st.text_input("API Key", value="", disabled=True)
+            st.text_input("Model", value=DEFAULT_EMBEDDING_MODEL_NAME, disabled=True)
+            st.text_input("Base URL", value="", disabled=True)
+            # Dimension setting (common for all types)
+            st.markdown("---")
+            dimension = 384 
+            embed_config.dimension = dimension
+            st.text_input("Dimension", value=embed_config.dimension, disabled=True)
+
+        elif new_embed_type == EmbeddedType.LOCAL_MODEL:
+            st.info(t("flow_local_embedding_info", self._lang))
+
+            model = st.text_input(
+                "Model Name",
+                value=embed_config.model,
+                help=t("flow_model_name_help", self._lang),
+            )
+
+            base_url = st.text_input(
+                "Model Path",
+                value=embed_config.base_url,
+                help=t("flow_model_path_help", self._lang),
+            )
+            
+            # Dimension setting (common for all types)
+            st.markdown("---")
+            dimension = st.number_input(
+                "Dimension",
+                value=embed_config.dimension,
+                min_value=128,
+                max_value=4096,
+                step=128,
+                help=t("flow_dimension_help", self._lang),
+            )
+
+        elif new_embed_type == EmbeddedType.OLLAMA:
+            # Ollama only requires model and base_url, no api_key needed
+            st.info(t("flow_ollama_info", self._lang))
+
+            model = st.text_input(
+                "Model",
+                value=embed_config.model,
+                help=t("flow_embedding_model_help", self._lang),
+            )
+
+            base_url = st.text_input(
+                "Base URL",
+                value=embed_config.base_url,
+                help=t("flow_embedding_base_url_help", self._lang),
+            )
+            
+            # Dimension setting (common for all types)
+            st.markdown("---")
+            dimension = st.number_input(
+                "Dimension",
+                value=embed_config.dimension,
+                min_value=128,
+                max_value=4096,
+                step=128,
+                help=t("flow_dimension_help", self._lang),
+            )
+
+        else:  # OpenAI_Embedding
+            st.info(t("flow_openai_embedding_info", self._lang))
+            if embed_config.is_valid() == False:
+                embed_config.api_key = self._state.chat_llm_config.api_key
+                embed_config.base_url = self._state.chat_llm_config.base_url
+
+            api_key = st.text_input(
+                "API Key",
+                value=embed_config.api_key,
+                type="password",
+                help=t("flow_embedding_api_key_help", self._lang),
+            )
+
+            model = st.text_input(
+                "Model",
+                value=embed_config.model,
+                help=t("flow_embedding_model_help", self._lang),
+            )
+
+            base_url = st.text_input(
+                "Base URL",
+                value=embed_config.base_url,
+                help=t("flow_embedding_base_url_help", self._lang),
+            )
+            
+            # Dimension setting (common for all types)
+            st.markdown("---")
+            dimension = st.number_input(
+                "Dimension",
+                value=embed_config.dimension,
+                min_value=128,
+                max_value=4096,
+                step=128,
+                help=t("flow_dimension_help", self._lang),
+            )
+
+        
+
+        # Create new EmbeddingConfig
+        new_config = EmbeddingConfig(
+            embedded_type=new_embed_type,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            dimension=dimension,
+        )
+        self._state.embedding_config = new_config
+
+        # Navigation
+        st.markdown("---")
+
+        def validate() -> bool:
+            if not new_config.is_valid():
+                if new_embed_type == EmbeddedType.LOCAL_MODEL:
+                    st.error(t("flow_fill_model_name", self._lang))
+                else:
+                    st.error(t("flow_fill_all_fields", self._lang))
+                return False
+            return True
+
+        self._render_navigation_buttons(next_callback=validate)
+
+
+class RAGParserStep(StepRendererBase):
+    """Renders RAG parser configuration step."""
+
+    def render(self) -> None:
+        """Render RAG parser configuration."""
+        st.header(t("flow_rag_header", self._lang))
+
+        config = self._state.rag_parser_config
+
+        st.info(t("flow_rag_info", self._lang))
+
+        max_chunk_size = st.number_input(
+            "Max Chunk Size",
+            value=config.max_chunk_size,
+            min_value=256,
+            max_value=16384,
+            step=256,
+            help=t("flow_max_chunk_help", self._lang),
+        )
+
+        limit = st.number_input(
+            "Limit",
+            value=config.limit,
+            min_value=0,
+            step=10,
+            help=t("flow_limit_help", self._lang),
+        )
+
+        skip_patterns = st.text_input(
+            "Skip Patterns",
+            value=config.skip_patterns,
+            help=t("flow_skip_patterns_help", self._lang),
+        )
+
+        # Update config
+        new_config = RAGParserConfig(
+            max_chunk_size=max_chunk_size,
+            limit=limit,
+            skip_patterns=skip_patterns,
+        )
+        self._state.rag_parser_config = new_config
+
+        # Navigation
+        st.markdown("---")
+        self._render_navigation_buttons()
+
+
+class UploadStep(StepRendererBase):
+    """Renders document upload step."""
+
+    def render(self) -> None:
+        """Render document upload interface."""
+        st.header(t("flow_upload_header", self._lang))
+
+        ensure_directories()
+
+        # Component/Partition selection
+        partition_map = get_partition_map()
+        component_options = list(partition_map.keys())
+        new_module_option = t("new_module", self._lang)
+        component_options.append(new_module_option)
+        
+        selected_component = st.selectbox(
+            t("flow_select_partition", self._lang),
+            options=component_options,
+            index=0,
+            help=t("flow_select_partition_help", self._lang),
+            key="component_select",
+        )
+        st.session_state.selected_component = selected_component
+
+        # Handle new module creation or use existing partition
+        if selected_component == new_module_option:
+            # User selected "New", ask for new module name
+            module_name = st.text_input(
+                t("flow_module_name", self._lang),
+                value=st.session_state.get("upload_module_name", ""),
+                help=t("flow_module_name_help", self._lang),
+                key="module_name_input",
+            )
+            st.session_state.upload_module_name = module_name
+            
+            # Append new partition if module_name is provided
+            if module_name:
+                try:
+                    append_partition(module_name)
+                    st.success(f"Partition '{module_name}' created successfully")
+                except Exception as e:
+                    st.error(f"Failed to create partition: {e}")
+                    logger.error(f"Failed to create partition {module_name}: {e}")
+        else:
+            # User selected existing partition, use it as module_name
+            module_name = selected_component
+            st.session_state.upload_module_name = module_name
+
+        st.markdown("---")
+
+        # Upload options
+        st.subheader(t("flow_select_upload_method", self._lang))
+
+        # Option 1: Archive upload
+        with st.expander(t("flow_upload_archive", self._lang), expanded=True):
+            st.caption(t("flow_archive_formats", self._lang))
+            archive_files = st.file_uploader(
+                t("flow_select_archive", self._lang),
+                type=["zip", "tar", "gz", "bz2", "xz", "tgz"],
+                key="archive_upload",
+            )
+
+        # Option 2: Markdown files upload
+        with st.expander(t("flow_upload_markdown", self._lang)):
+            st.caption(t("flow_markdown_formats", self._lang))
+            md_files = st.file_uploader(
+                t("flow_select_markdown", self._lang),
+                type=["md", "mdx"],
+                accept_multiple_files=True,
+                key="md_upload",
+            )
+
+        # Option 3: GitHub URL
+        with st.expander(t("flow_github_clone", self._lang)):
+            github_url = st.text_input(
+                "GitHub URL",
+                placeholder="https://github.com/username/repo",
+                key="github_url_input",
+            )
+
+        # Option 4: Local directory upload
+        with st.expander(t("flow_local_dir", self._lang)):
+            st.caption(t("flow_local_dir_desc", self._lang))
+            local_files = st.file_uploader(
+                t("flow_local_dir_path", self._lang),
+                type=["md", "mdx"],
+                accept_multiple_files=True,
+                key="local_dir_upload",
+            )
+
+        # Navigation and actions
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+
+        if col1.button(t("flow_prev_step", self._lang), use_container_width=True):
+            self._state.step_back()
+
+        if col2.button(t("flow_load_docs", self._lang), type="primary", use_container_width=True):
+            self._process_upload(
+                module_name=module_name,
+                archive_files=archive_files,
+                md_files=md_files,
+                github_url=github_url,
+                local_files=local_files,
+            )
+
+    def _process_upload(
+        self,
+        module_name: str,
+        archive_files,
+        md_files,
+        github_url: str,
+        local_files,
+    ) -> None:
+        """Process the upload based on the selected method."""
+        # Validate module name
+        if not module_name or not module_name.strip():
+            st.error(t("flow_enter_module_name", self._lang))
+            return
+
+        module_name = module_name.strip()
+
+        # Check if module already exists
+        module_upload_path = os.path.join(UPLOADED_DIR, module_name)
+        module_loaded_path = os.path.join(LOADED_DIR, module_name)
+
+        if os.path.exists(module_loaded_path):
+            logger.warning(t("flow_module_exists", self._lang).format(module_name))
+            shutil.rmtree(module_loaded_path)
+
+        # Determine upload method and process
+        try:
+            if archive_files:
+                self._process_archive_upload(module_name, archive_files, module_upload_path)
+            elif md_files:
+                self._process_md_upload(module_name, md_files, module_upload_path)
+            elif github_url:
+                self._process_github_clone(module_name, github_url, module_upload_path)
+            elif local_files:
+                self._process_local_dir(module_name, local_files, module_upload_path)
+            else:
+                st.error(t("flow_select_method", self._lang))
+                return
+
+            # Embed documents (use module_name as component/partition name)
+            self._embed_documents(module_name, module_upload_path, module_loaded_path)
+
+        except Exception as e:
+            logger.error(f"Upload processing failed: {e}")
+            st.error(t("flow_upload_error", self._lang).format(e))
+            # Cleanup on error
+            if os.path.exists(module_upload_path):
+                shutil.rmtree(module_upload_path)
+
+    def _process_archive_upload(self, module_name: str, archive_file, dest_path: str) -> None:
+        """Process archive file upload."""
+        os.makedirs(dest_path, exist_ok=True)
+
+        # Save archive to temp
+        tmp_path = os.path.join(TMP_DIR, archive_file.name)
+        os.makedirs(TMP_DIR, exist_ok=True)
+        with open(tmp_path, "wb") as f:
+            f.write(archive_file.getvalue())
+
+        # Extract
+        with st.spinner(t("flow_extracting", self._lang)):
+            if not extract_archive(tmp_path, dest_path):
+                raise Exception(t("flow_extract_failed", self._lang))
+
+        # Cleanup temp
+        os.remove(tmp_path)
+        st.success(t("flow_archive_extracted", self._lang).format(dest_path))
+
+    def _process_md_upload(self, module_name: str, md_files, dest_path: str) -> None:
+        """Process one or more markdown files upload from user's browser."""
+        if not md_files:
+            raise Exception(t("flow_no_files_selected", self._lang))
+
+        os.makedirs(dest_path, exist_ok=True)
+
+        with st.spinner(t("flow_saving_files", self._lang)):
+            for md_file in md_files:
+                file_path = os.path.join(dest_path, md_file.name)
+                with open(file_path, "wb") as f:
+                    f.write(md_file.getvalue())
+
+        st.success(t("flow_files_saved", self._lang).format(len(md_files), dest_path))
+
+    def _process_github_clone(self, module_name: str, github_url: str, dest_path: str) -> None:
+        """Process GitHub repository clone."""
+        if not github_url.strip():
+            raise Exception(t("flow_enter_github_url", self._lang))
+
+        with st.spinner(t("flow_cloning_repo", self._lang)):
+            if not clone_github_repo(github_url.strip(), dest_path):
+                raise Exception(t("flow_clone_failed", self._lang))
+
+        st.success(t("flow_repo_cloned", self._lang).format(dest_path))
+
+    def _process_local_dir(self, module_name: str, local_files, dest_path: str) -> None:
+        """Process local files upload from user's browser."""
+        if not local_files:
+            raise Exception(t("flow_no_files_selected", self._lang))
+
+        os.makedirs(dest_path, exist_ok=True)
+
+        # Save uploaded files to dest_path
+        with st.spinner(t("flow_saving_files", self._lang)):
+            file_count = 0
+            for uploaded_file in local_files:
+                file_path = os.path.join(dest_path, uploaded_file.name)
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                file_count += 1
+
+            if file_count == 0:
+                raise Exception(t("flow_no_markdown_found", self._lang))
+
+        st.success(t("flow_files_saved", self._lang).format(file_count, dest_path))
+
+    def _embed_documents(
+        self, module_name: str, upload_path: str, loaded_path: str
+    ) -> None:
+        """Embed documents into the vector database."""
+        rag_config = self._state.rag_parser_config
+
+        # Parse skip patterns
+        skip_patterns = []
+        if rag_config.skip_patterns:
+            skip_patterns = [p.strip() for p in rag_config.skip_patterns.split(",") if p.strip()]
+
+        st.markdown("---")
+        st.subheader(t("flow_load_progress", self._lang))
+
+        progress_bar = st.progress(0, text=t("flow_preparing", self._lang))
+        status_text = st.empty()
+
+        try:
+            # Count total files first
+            total_files = 0
+            for root, _, files in os.walk(upload_path):
+                total_files += sum(1 for f in files if is_markdown_file(f))
+
+            if total_files == 0:
+                raise Exception(t("flow_no_markdown_to_load", self._lang))
+
+            status_text.text(t("flow_found_files", self._lang).format(total_files, module_name))
+
+            # Initialize embedder
+            embedder = DocumentEmbedder(
+                embedding_config=self._state.embedding_config,
+                table_name=self._state.table_name or DEFAULT_TABLE_NAME,
+            )
+
+            # Process with progress
+            progress_bar.progress(0.1, text=t("flow_init_embedding", self._lang))
+
+            # Embed documents
+            progress_bar.progress(0.2, text=t("flow_loading_docs", self._lang))
+
+            total_docs = embedder.embed_from_directory(
+                doc_base=upload_path,
+                component=module_name,
+                skip_patterns=skip_patterns,
+                batch_size=64,
+                limit=rag_config.limit if rag_config.limit > 0 else 0,
+            )
+
+            progress_bar.progress(0.9, text=t("flow_moving_files", self._lang))
+
+            # Move to loaded directory
+            shutil.move(upload_path, loaded_path)
+
+            progress_bar.progress(1.0, text=t("flow_complete", self._lang))
+            status_text.text(t("flow_docs_loaded", self._lang).format(total_docs))
+
+            st.success(t("flow_module_loaded", self._lang).format(module_name))
+
+            # Clear module name
+            st.session_state.upload_module_name = ""
+
+            # Show button to go back to status
+            if st.button(t("flow_back_to_status", self._lang), use_container_width=True):
+                self._state.go_to_step(FLOW_STEP_STATUS)
+
+        except Exception as e:
+            progress_bar.progress(0, text=t("flow_load_failed", self._lang))
+            raise
+
+
+# =============================================================================
+# Flow Controller
+# =============================================================================
+
+
+class FlowController:
+    """Controls the flow UI application."""
+
+    def __init__(self):
+        """Initialize flow controller."""
+        self._state = StateManager()
+        self._step_renderers: dict[int, StepRendererBase] = {
+            FLOW_STEP_STATUS: StatusStep(self._state),
+            FLOW_STEP_CHAT_LLM: ChatLLMStep(self._state),
+            FLOW_STEP_EMBED_LLM: EmbeddingLLMStep(self._state),
+            FLOW_STEP_RAG_PARSER: RAGParserStep(self._state),
+            FLOW_STEP_UPLOAD: UploadStep(self._state),
+        }
+
+    def run(self) -> None:
+        """Run the flow UI application with page setup."""
+        # Setup page
+        PageConfigurator.setup()
+
+        # Run content
+        self.run_content()
+
+    def run_content(self, show_menu: bool = True) -> None:
+        """
+        Run the flow UI content without page setup.
+
+        Args:
+            show_menu: Whether to show the top-right menu buttons
+        """
+        # Render menu buttons in top right corner
+        if show_menu:
+            menu_nav = MenuNavigator()
+            menu_nav.render_menu()
+
+        # Render sidebar and progress
+        SidebarRenderer(self._state).render()
+        ProgressRenderer(self._state).render()
+
+        # Render current step
+        self._render_current_step()
+
+    def _render_current_step(self) -> None:
+        """Render the current step."""
+        step = self._state.current_step
+        if step in self._step_renderers:
+            self._step_renderers[step].render()
+        else:
+            st.error(t("flow_unknown_step", get_lang()).format(step))
+
+
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
+
+def main() -> None:
+    """Main entry point for the flow UI application."""
+    logger.info("""
+                --------------------------------
+                Flow UI module loaded
+                --------------------------------
+                """)
+    controller = FlowController()
+    controller.run()
+
+
+# Run the application only when executed directly
+if __name__ == "__main__":
+    main()

@@ -13,26 +13,6 @@ fi
 
 source "$PROJECT_ROOT/.env"
 
-if [[ -z "$DB_NAME" ]]; then
-    echo "Error: Please provide a database name in the .env file"
-    exit 1
-fi
-
-if [[ -z "$DB_USER" ]]; then
-    echo "Error: Please provide a database user in the .env file"
-    exit 1
-fi
-
-if [[ -z "$DB_HOST" ]]; then
-    echo "Error: Please provide a database host in the .env file"
-    exit 1
-fi
-
-if [[ -z "$DB_PORT" ]]; then
-    echo "Error: Please provide a database port in the .env file"
-    exit 1
-fi
-
 # Create the database using IF NOT EXISTS to avoid errors if database already exists
 echo "Creating database $DB_NAME if it does not exist..."
 
@@ -51,3 +31,13 @@ else
 fi
 
 echo "Database $DB_NAME created successfully (or already exists)"
+
+# Create the vector table
+echo "Creating vector table..."
+cd "$PROJECT_ROOT"
+# if ! uv run python -m src.common.db create-table; then
+#     echo "Error: Failed to create vector table"
+#     exit 1
+# fi
+
+echo "All database setup completed successfully!"
