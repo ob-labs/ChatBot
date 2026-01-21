@@ -2,10 +2,10 @@
 
 help:
 	@echo "Available targets:"
-	@echo "  make init   - Initialize the project (install dependencies)"
-	@echo "  make start  - Start the ChatBot UI service"
-	@echo "  make stop   - Stop the ChatBot UI service"
-	@echo "  make clean  - Clean temporary files and caches"
+	@echo "  make init        - Initialize the project (install dependencies)"
+	@echo "  make start       - Start the ChatBot UI service (default: chat)"
+	@echo "  make stop        - Stop the ChatBot UI service"
+	@echo "  make clean       - Clean temporary files and caches"
 
 init:
 	@bash scripts/init.sh

@@ -3,8 +3,10 @@
 .venv
 logs/
 __pycache__
-data/doc_repos/**
+data/**
 *.db
-data/uploaded/**
 !.gitkeep
 .DS_Store
+uv.lock
+.vscode/settings.json
+pyrightconfig.json

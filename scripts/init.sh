@@ -7,6 +7,13 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "Starting project initialization..."
 
+# Check .env configuration
+echo "Checking .env configuration..."
+if ! bash "$SCRIPT_DIR/check_env.sh" 2>&1; then
+    echo "Failed to check .env configuration!"
+    exit 1
+fi
+
 # Check if uv is installed
 if ! command -v uv &> /dev/null; then
     echo "uv is not installed. Installing uv..."
@@ -17,7 +24,7 @@ fi
 # Check Python version
 echo "Checking Python version..."
 REQUIRED_PYTHON_MAJOR=3
-REQUIRED_PYTHON_MINOR=10
+REQUIRED_PYTHON_MINOR=11
 
 # Get current Python version
 if command -v python3 &> /dev/null; then

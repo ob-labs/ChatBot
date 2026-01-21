@@ -74,7 +74,7 @@ prompt = """
 接下来回答用户的问题吧！
 """
 
-from agents.base import AgentBase
+from src.agents.base import AgentBase
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)

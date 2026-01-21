@@ -31,9 +31,9 @@ def setup_logger(name: Optional[str] = None, log_level: int = logging.INFO) -> l
     logger.setLevel(log_level)
     
     # Create formatter with standard format
-    # Format: YYYY-MM-DD HH:MM:SS,mmm - LEVEL - MODULE - MESSAGE
+    # Format: [MODULE:LINE - YYYY-MM-DD HH:MM:SS,mmm - LEVEL] - MESSAGE
     formatter = logging.Formatter(
-        fmt='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+        fmt='[%(name)s:%(lineno)d-%(asctime)s-%(levelname)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
@@ -43,12 +43,12 @@ def setup_logger(name: Optional[str] = None, log_level: int = logging.INFO) -> l
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
-    # File handler - log to logger/image.log in project root
+    # File handler - log to logs/chatbot.log in project root
     project_root = Path(__file__).parent.parent.parent
-    log_dir = project_root / "logger"
+    log_dir = project_root / "logs"
     log_dir.mkdir(exist_ok=True)
     
-    log_file = log_dir / "image.log"
+    log_file = log_dir / "chatbot.log"
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)

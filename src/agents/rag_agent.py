@@ -60,7 +60,7 @@ Answer requirements:
 Below, please give your answer to the user's question directly according to the above requirements.
 """
 
-from agents.base import AgentBase
+from src.agents.base import AgentBase
 from src.common.logger import get_logger
 
 logger = get_logger(__name__)
