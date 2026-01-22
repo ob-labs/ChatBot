@@ -1,6 +1,7 @@
 from typing import Dict
 
 from langchain_core.embeddings import Embeddings
+from langchain_oceanbase.embedding_utils import DefaultEmbeddingFunctionAdapter
 
 from src.common.config import (
     EmbeddedType,
@@ -31,10 +32,6 @@ def get_embedding(config: EmbeddingConfig) -> Embeddings:
     Returns:
         Embedding instance
     """
-    if config.embedded_type == EmbeddedType.DEFAULT:
-        logger.info(f"Use default embedded model")
-        return None
-    
     global __embeddings
 
     # Return cached embedding if exists
@@ -44,7 +41,10 @@ def get_embedding(config: EmbeddingConfig) -> Embeddings:
 
     # Create new embedding based on config type
     embedding: Embeddings
-    if config.embedded_type == EmbeddedType.OLLAMA:
+    if config.embedded_type == EmbeddedType.DEFAULT:
+        logger.info(f"Use default embedded model")
+        embedding = DefaultEmbeddingFunctionAdapter()
+    elif config.embedded_type == EmbeddedType.OLLAMA:
         logger.info(f"Creating Ollama embedding: model={config.model}")
         embedding = create_ollama_embedding(
             base_url=config.base_url,
