@@ -41,6 +41,9 @@ component_mapping = {
     "operator": 5,
     "odp": 6,
     "odc": 7,
+    "odp": 8,
+    "obshell": 9,
+    "miniob": 10
 }
 
 # Supported components

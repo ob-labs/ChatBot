@@ -21,6 +21,9 @@ prompt = """
 1. Chat
 2. Features
 3. Diagnosis
+Chat 问题, 偏向闲聊性质的问题, 例如用户询问天气、询问当前时间等.
+Features 问题, 偏向特性解答或介绍性质的问题. 
+Diagnosis 问题, 偏向诊断性质的问题, 通常需要更多的信息才能回答, 例如用户的 OceanBase 日志.
 
 判断完问题之后，将与 OceanBase 相关的问题进行改写，使其更适合用来进行文档检索。
 
