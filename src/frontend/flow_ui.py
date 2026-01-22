@@ -49,7 +49,7 @@ from src.frontend.i18n import t
 from src.frontend.menu import MenuNavigator
 from src.rag.rag import DocumentEmbedder
 from src.rag.ob import component_mapping, supported_components
-from src.rag.embedding.base import DEFAULT_EMBEDDING_MODEL_NAME
+from src.common.config import DEFAULT_EMBEDDING_MODEL_NAME, DEFAULT_BGE_HF_REPO_ID
 
 dotenv.load_dotenv()
 
@@ -545,21 +545,17 @@ class EmbeddingLLMStep(StepRendererBase):
 
         elif new_embed_type == EmbeddedType.LOCAL_MODEL:
             st.info(t("flow_local_embedding_info", self._lang))
-
-            model = st.text_input(
-                "Model Name",
-                value=embed_config.model,
-                help=t("flow_model_name_help", self._lang),
-            )
-
-            base_url = st.text_input(
-                "Model Path",
-                value=embed_config.base_url,
-                help=t("flow_model_path_help", self._lang),
-            )
+            
+            # Show disabled inputs
+            st.text_input("API Key", value="", disabled=True)
+            st.text_input("Model", value=DEFAULT_BGE_HF_REPO_ID + "(performance is lower than default, no recommend to use)", disabled=True)
+            st.text_input("Base URL", value="", disabled=True)
+            model = DEFAULT_BGE_HF_REPO_ID
+            base_url = ""
             
             # Dimension setting (common for all types)
             st.markdown("---")
+            embed_config.dimension = 1024
             dimension = st.number_input(
                 "Dimension",
                 value=embed_config.dimension,

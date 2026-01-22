@@ -36,11 +36,14 @@ DEFAULT_DB_NAME = "test"
 DEFAULT_TABLE_NAME = "corpus"
 
 # ==================== Embedding Model Related Configuration ====================
-DEFAULT_BGE_MODEL_PATH = str(Path.home() / ".cache" / "pyseekdb" / "BAAI/bge-m3")
+# Use local snapshot path to avoid re-downloading attempts
+# The model files are cached at ~/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/<version>/
+DEFAULT_BGE_MODEL_PATH = str(Path.home() / ".cache/huggingface/hub/models--BAAI--bge-m3")
+DEFAULT_BGE_HF_REPO_ID = "BAAI/bge-m3"
 DEFAULT_EMBEDDING_MODEL = "embedding-2"
-DEFAULT_EMBEDDING_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-DEFAULT_EMBEDDING_URL = "http://30.249.224.105:8080/api/embed"
+DEFAULT_EMBEDDING_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_EMBEDDING_TOKEN = "test"
+DEFAULT_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Ollama embedding defaults
 DEFAULT_OLLAMA_MODEL = "bge-m3"

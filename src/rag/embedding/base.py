@@ -14,9 +14,6 @@ from .openai import create_openai_embedding
 
 logger = get_logger(__name__)
 
-# Default embedding model name for BGE
-DEFAULT_EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-
 # Global embeddings cache (key: EmbeddingConfig, value: embedding instance)
 __embeddings: Dict[EmbeddingConfig, Embeddings] = {}
 
