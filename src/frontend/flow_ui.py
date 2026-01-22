@@ -739,13 +739,15 @@ class UploadStep(StepRendererBase):
                 help=t("flow_module_name_help", self._lang),
                 key="module_name_input",
             )
+            module_name = module_name.strip()
             st.session_state.upload_module_name = module_name
             
             # Append new partition if module_name is provided
             if module_name:
                 try:
-                    append_partition(module_name)
-                    st.success(f"Partition '{module_name}' created successfully")
+                    if module_name not in partition_map.keys():
+                        append_partition(module_name)
+                        st.success(f"Partition '{module_name}' created successfully")
                 except Exception as e:
                     st.error(f"Failed to create partition: {e}")
                     logger.error(f"Failed to create partition {module_name}: {e}")
@@ -786,16 +788,6 @@ class UploadStep(StepRendererBase):
                 key="github_url_input",
             )
 
-        # Option 4: Local directory upload
-        with st.expander(t("flow_local_dir", self._lang)):
-            st.caption(t("flow_local_dir_desc", self._lang))
-            local_files = st.file_uploader(
-                t("flow_local_dir_path", self._lang),
-                type=["md", "mdx"],
-                accept_multiple_files=True,
-                key="local_dir_upload",
-            )
-
         # Navigation and actions
         st.markdown("---")
 
@@ -810,7 +802,6 @@ class UploadStep(StepRendererBase):
                 archive_files=archive_files,
                 md_files=md_files,
                 github_url=github_url,
-                local_files=local_files,
             )
 
     def _process_upload(
@@ -819,7 +810,6 @@ class UploadStep(StepRendererBase):
         archive_files,
         md_files,
         github_url: str,
-        local_files,
     ) -> None:
         """Process the upload based on the selected method."""
         # Validate module name
@@ -845,8 +835,6 @@ class UploadStep(StepRendererBase):
                 self._process_md_upload(module_name, md_files, module_upload_path)
             elif github_url:
                 self._process_github_clone(module_name, github_url, module_upload_path)
-            elif local_files:
-                self._process_local_dir(module_name, local_files, module_upload_path)
             else:
                 st.error(t("flow_select_method", self._lang))
                 return
@@ -905,27 +893,6 @@ class UploadStep(StepRendererBase):
                 raise Exception(t("flow_clone_failed", self._lang))
 
         st.success(t("flow_repo_cloned", self._lang).format(dest_path))
-
-    def _process_local_dir(self, module_name: str, local_files, dest_path: str) -> None:
-        """Process local files upload from user's browser."""
-        if not local_files:
-            raise Exception(t("flow_no_files_selected", self._lang))
-
-        os.makedirs(dest_path, exist_ok=True)
-
-        # Save uploaded files to dest_path
-        with st.spinner(t("flow_saving_files", self._lang)):
-            file_count = 0
-            for uploaded_file in local_files:
-                file_path = os.path.join(dest_path, uploaded_file.name)
-                with open(file_path, "wb") as f:
-                    f.write(uploaded_file.getvalue())
-                file_count += 1
-
-            if file_count == 0:
-                raise Exception(t("flow_no_markdown_found", self._lang))
-
-        st.success(t("flow_files_saved", self._lang).format(file_count, dest_path))
 
     def _embed_documents(
         self, module_name: str, upload_path: str, loaded_path: str
