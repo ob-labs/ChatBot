@@ -11,7 +11,7 @@ In this workshop, we will build a RAG chatbot that answers questions related to 
 The chatbot consists of the following components:
 
 1. A text embedding service that converts documents into vectors, using Tongyi Qianwen's embedding API
-2. A database that provides storage and query capabilities for document vectors and other structured data, using OceanBase 4.3.3
+2. A database that provides storage and query capabilities for document vectors and other structured data, using OceanBase 4.3.5
 3. Several LLM agents that analyze user questions and generate answers based on retrieved documents and questions, built with Tongyi Qianwen's large model capabilities
 4. A chat interface for user interaction, built with Streamlit
 
@@ -51,7 +51,7 @@ Vector retrieval is a technique for quickly finding the most similar vectors to 
 
 - Search based on vector distance (e.g., Euclidean distance) or similarity (e.g., cosine similarity)
 - Typically uses Approximate Nearest Neighbor (ANN) algorithms to improve retrieval efficiency
-- OceanBase 4.3.3 supports the HNSW algorithm, which is a high-performance ANN algorithm
+- OceanBase 4.3.5 supports the HNSW algorithm, which is a high-performance ANN algorithm
 - ANN can quickly find the most similar results approximately from millions or even billions of vectors
 - Compared to traditional keyword search, vector retrieval better understands semantic similarity
 
@@ -90,7 +90,7 @@ Training and releasing large language models takes considerable time, and traini
 
 Notes: If you are participating in the OceanBase AI Workshop, you can skip steps 1 ~ 4 below. All required software is already prepared on the machine. :)
 
-1. Install [Python 3.11+](https://www.python.org/downloads/) and [pip](https://pip.pypa.io/en/stable/installation/). If the version of Python on your machine is lower than 3.11, you can use Miniconda to create a new environment with Python 3.11. Refer to the [Miniconda installation guide](https://docs.anaconda.com/miniconda/install/) for details.
+1. Install [Python 3.11+](https://www.python.org/downloads/) and [pip](https://pip.pypa.io/en/stable/installation/). 
 
 2. Install [uv](https://github.com/astral-sh/uv) with command `curl -LsSf https://astral.sh/uv/install.sh | sh` or `pip install uv`
 
@@ -114,7 +114,7 @@ Notes: If you are participating in the OceanBase AI Workshop, you can skip steps
 
 ### 1. Get an OceanBase Database
 
-First, we need to obtain an OceanBase database version 4.3.3 or above to store our vector data. You can get an OceanBase database through either of these two methods:
+First, we need to obtain an OceanBase database version 4.3.5 or above to store our vector data. You can get an OceanBase database through either of these two methods:
 
 1. Use the OB Cloud database free trial instances. For platform registration and instance creation, please refer to [OB Cloud Database 365-Day Free Trial](https://www.oceanbase.com/free-trial); (Recommended)
 2. Use Docker to start a standalone OceanBase database. (Alternative option, requires Docker environment, consumes more local resources)
@@ -131,11 +131,6 @@ Go to the "Instance Workbench" on the instance details page, click the "Connect"
 
 ![Get Database Connection Information](./images/obcloud-get-connection.png)
 
-##### Modify Parameters to Enable Vector Module
-
-Go to "Parameter Management" on the instance details page, and set the `ob_vector_memory_limit_percentage` parameter to 30 to enable the vector module.
-
-![Modify Parameters to Enable Vector Module](./images/obcloud-modify-param.png)
 
 #### 1.2 Deploy an OceanBase Database with Docker
 
@@ -147,99 +142,17 @@ If this is your first time logging into the machine provided by the workshop, yo
 systemctl start docker
 ```
 
-Then you can start an OceanBase docker container with:
+
+
+
+### 2. Set up environment variables
+
+Next, you need to switch to the workshop project directory:
 
 ```bash
-docker run --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -e OB_SERVER_IP=127.0.0.1 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
+git clone https://github.com/ob-labs/ChatBot
+cd ChatBot
 ```
-
-If the command executes successfully, it will print the container ID:
-
-```bash
-af5b32e79dc2a862b5574d05a18c1b240dc5923f04435a0e0ec41d70d91a20ee
-```
-
-##### Check the bootstrap of OceanBase is complete
-
-After the container is started, you can check the bootstrap status of OceanBase with:
-
-```bash
-docker logs -f ob433
-```
-
-The initialization takes about 2-3 minutes. When you see the following message (the bottom `boot success!` is essential), the bootstrap is complete:
-
-```bash
-cluster scenario: express_oltp
-Start observer ok
-observer program health check ok
-Connect to observer ok
-Initialize oceanbase-ce ok
-Wait for observer init ok
-+----------------------------------------------+
-|                 oceanbase-ce                 |
-+------------+---------+------+-------+--------+
-| ip         | version | port | zone  | status |
-+------------+---------+------+-------+--------+
-| 172.17.0.2 | 4.3.3.1 | 2881 | zone1 | ACTIVE |
-+------------+---------+------+-------+--------+
-obclient -h172.17.0.2 -P2881 -uroot -Doceanbase -A
-
-cluster unique id: c17ea619-5a3e-5656-be07-00022aa5b154-19298807cfb-00030304
-
-obcluster running
-
-...
-
-check tenant connectable
-tenant is connectable
-boot success!
-```
-
-Press `Ctrl+C` to exit the log view.
-
-##### Test deployment (Optional)
-
-Connect to the OceanBase cluster with mysql client to check the deployment.
-
-```bash
-mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
-```
-
-If the deployment is successful, you will see the following output:
-
-```bash
-+--------------------+
-| Database           |
-+--------------------+
-| information_schema |
-| mysql              |
-| oceanbase          |
-| test               |
-+--------------------+
-```
-
-### 2. Install dependencies
-
-First of all, you need to change to the directory of the workshop project:
-
-```bash
-cd ~/ai-workshop-2024
-```
-
-We use uv to manage the dependencies of the chatbot project. You can install the dependencies with the following command:
-
-```bash
-uv sync
-```
-
-If you are using the machine provided by the workshop, you will probably see the following message because the dependencies are already installed in the machine:
-
-```bash
-Resolved X packages in XXms
-```
-
-### 3. Set up environment variables
 
 We prepare a `.env.example` file that contains the environment variables required for the chatbot. You can copy the `.env.example` file to `.env` and update the values in the `.env` file.
 
@@ -249,152 +162,119 @@ cp .env.example .env
 vi .env
 ```
 
-The content of `.env.example` is as follows, you only need to update the `API_KEY` and `OPENAI_EMBEDDING_API_KEY` with the value you get from the Bailian dashboard if you are following the workshop steps which will take LLMs from Tongyi Qwen. If you are using the OB Cloud instance, update the database-related environment variables starting with `DB_` accordingly. After updating the `.env` file, save and exit the editor.
+The content of `.env.example` is as follows. If you are following the workshop steps (using LLM capabilities from Tongyi Qianwen), you need to update `API_KEY` with the API KEY values you obtained from the Alibaba Cloud Bailian console. If you are using an OB Cloud database instance, update the variables starting with `DB_` with your database connection information, then save the file.
 
 ```bash
-API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # Fill your API Key
-LLM_MODEL="qwen-turbo-2024-11-01"
-LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-HF_ENDPOINT=https://hf-mirror.com
-BGE_MODEL_PATH=BAAI/bge-m3
-
-OLLAMA_URL=
-OLLAMA_TOKEN=
-
-OPENAI_EMBEDDING_API_KEY= # Fill your API Key
-OPENAI_EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-OPENAI_EMBEDDING_MODEL=text-embedding-v3
 
 UI_LANG="zh"
 
-# If you are using the OB Cloud instance, update the following database-related environment variables accordingly
-DB_HOST="127.0.0.1" 
+
+#######################################################################
+###################                               #####################
+###################          Model Setting        #####################
+###################                               #####################
+#######################################################################
+HF_ENDPOINT=https://hf-mirror.com
+
+### Chat model
+API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx             -----> Fill in the API Key you just applied for
+LLM_MODEL="qwen3-coder-plus"
+LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# =============================================================================
+# Embedding Model Configuration
+# =============================================================================
+# EMBEDDED_TYPE: Embedding model type, available options:
+#   - default: Use built-in sentence-transformers/all-MiniLM-L6-v2 model (no additional config needed)
+#   - local_model: Use local embedding model (requires EMBEDDED_LLM_MODEL and EMBEDDED_LLM_BASE_URL)
+#   - ollama: Use Ollama embedding service (requires all three params below)
+#   - openai_embedding: Use OpenAI embedding API (requires all three params below)
+EMBEDDED_TYPE=default
+
+# Vector embedding dimension (must match your embedding model's output dimension)
+EMBEDDED_DIMENSION=384
+
+# EMBEDDED_API_KEY: API key for embedding service
+#   - Required for: ollama, openai_embedding
+#   - Not required for: default, local_model
+EMBEDDED_API_KEY=
+
+# EMBEDDED_LLM_MODEL: Embedding model name
+#   - For local_model: model name (e.g., BAAI/bge-m3)
+#   - For ollama: model name (e.g., nomic-embed-text)
+#   - For openai_embedding: model name (e.g., tongyi text-embedding-3-small)
+EMBEDDED_LLM_MODEL=
+
+# EMBEDDED_LLM_BASE_URL: Base URL or model path
+#   - For local_model: local model path (e.g., /path/to/model), if this is empty, it will be automatically downloaded
+#   - For ollama: Ollama server URL (e.g., http://localhost:11434)
+#   - For openai_embedding: OpenAI API base URL (e.g., https://api.openai.com/v1)
+EMBEDDED_LLM_BASE_URL=
+
+
+#######################################################################
+###################                               #####################
+###################          Database Setting     #####################
+###################                               #####################
+#######################################################################
+
+# Whether to reuse the current database
+# When set to true, will reuse existing database connection
+# When set to false, will start download dockers, at this time:
+#                   if DB_STORE is seekdb, DB_USER must be root
+#                   if DB_STORE is oceanbase, DB_USER must be root@test
+REUSE_CURRENT_DB=true                ---> If using local docker, change to false; if using the cloud OceanBase you just created, set to true
+
+
+# Use what kind of docker, seekdb's docker or oceanbase-ce's docker
+# Options: seekdb, oceanbase
+# seekdb: If REUSE_CURRENT_DB is false, download seekdb docker
+# oceanbase: If REUSE_CURRENT_DB is false, download oceanbase-ce docker
+DB_STORE=seekdb            ---> If using the cloud OceanBase you just created, set to oceanbase
+
+----> If using the cloud OceanBase you just created, fill in the correct database address
+# Database Setting, please change as your environment. 
+DB_HOST="127.0.0.1"
 DB_PORT="2881"
-DB_USER="root@test"
+#if REUSE_CURRENT_DB=false and DB_STORE=seekdb, DB_USER must be root
+#if REUSE_CURRENT_DB=false and DB_STORE=oceanbase, DB_USER must be root@test
+DB_USER="root"
+# If database use OceanBase, the DB_USER will contain tenant's name
+# DB_USER="root@test"
+DB_PASSWORD="root@test"
 DB_NAME="test"
-DB_PASSWORD=""
+
+
+#######################################################################
+###################                               #####################
+###################         RAG Parser Setting    #####################
+###################                               #####################
+#######################################################################
+# Maximum chunk size for text splitting (in characters)
+MAX_CHUNK_SIZE=4096
+
+# Limit the number of documents to process (0 means no limit)
+LIMIT=0
+
+# Patterns to skip when processing documents (comma-separated, e.g., "*.log,*.tmp")
+SKIP_PATTERNS=""
+
+
 ```
 
-### 4. Connect to the Database
-
-You can use our prepared script to try connecting to the database to ensure database-related environment variables are set correctly:
-
+### 3. Install dependencies
 ```bash
-bash scripts/connect_db.sh
-# If you successfully enter the MySQL connection, this verifies that the database-related environment variables are set correctly.
+make init
 ```
+This command will take much time to download all dependency, if use docker to run OceanBase seekdb or OceanBase, it will increase time usage.
 
-### 5. Prepare Document Data
+### 4. Prepare Document Data
 
 In this step, we will clone the open-source documentation repositories of OceanBase components and process them to generate document vectors and other structured data, which will then be inserted into the OceanBase database we deployed in step 1.
 
-#### 5.1 Clone Document Repositories
-
-First, we'll use git to clone the documentation for the oceanbase project locally.
-
 ```bash
-git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git data/doc_repos/oceanbase-doc
-# If your network is slow when accessing GitHub, you can use the following command to clone the repository from Gitee
-git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git data/doc_repos/oceanbase-doc
+make start
 ```
-
-#### 5.2 Document Format Standardization
-
-Since some files in OceanBase's open-source documentation use `====` and `----` to represent level 1 and level 2 headings, in this step we'll convert them to the standard `#` and `##` representation.
-
-```bash
-# Convert document headings to standard markdown format
-uv run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
-```
-
-#### 5.3 Convert Documents to Vectors and Insert into OceanBase
-
-We provide the `src/tools/embed_docs.py` script which, when given a document directory and corresponding component, will traverse all markdown documents in the directory, split long documents into chunks, convert them into vectors using the embedding model, and finally insert the document chunk content, embedded vectors, and chunk metadata (in JSON format, including document title, relative path, component name, chunk title, cascading titles) together into the same table in OceanBase, ready for querying.
-
-In order to save time, we will only process a few documents related to vector retrieval. After opening the chat interface in step 6, the questions you ask about vector retrieval functionality of OceanBase will receive more accurate answers.
-
-```bash
-# Generate document vectors and metadata
-uv run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
-```
-
-While waiting for the text processing, we can examine the contents of `src/tools/embed_docs.py` to see how it works.
-
-First, the file instantiates two objects: one is the embedding service `embeddings` responsible for converting text content into vector data; the other is OceanBase's LangChain Vector Store service, which encapsulates pyobvector (OceanBase's vector retrieval SDK) and provides simple, user-friendly interface methods. We've also established partition keys for OceanBase components to greatly improve efficiency when querying documents for specific components.
-
-```python
-embeddings = get_embedding(
-    ollama_url=os.getenv("OLLAMA_URL") or None,
-    ollama_token=os.getenv("OLLAMA_TOKEN") or None,
-    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
-    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or None,
-    model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
-)
-
-vs = OceanBase(
-    embedding_function=embeddings, # Pass in embedding service, called immediately when inserting documents
-    table_name=args.table_name,
-    connection_args=connection_args,
-    metadata_field="metadata",
-    extra_columns=[Column("component_code", Integer, primary_key=True)],
-    partitions=ObListPartition(
-        is_list_columns=False,
-        list_part_infos=[RangeListPartInfo(k, v) for k, v in cm.items()]
-        + [RangeListPartInfo("default", "DEFAULT")],
-        list_expr="component_code",
-    ),
-    echo=args.echo,
-)
-```
-
-Next, the script checks if the vector functionality module is enabled in the connected OceanBase cluster, and if not, enables it using SQL commands.
-
-```python
-# Check if vector module is enabled by querying ob_vector_memory_limit_percentage parameter
-params = vs.obvector.perform_raw_text_sql(
-    "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
-)
-# ...
-
-# Enable vector module by setting ob_vector_memory_limit_percentage parameter to 30
-vs.obvector.perform_raw_text_sql(
-  "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
-)
-```
-
-Finally, we traverse the document directory, read and chunk the document content, and submit it to OceanBase Vector Store for embedding and storage.
-
-```python
-if args.doc_base is not None:
-    loader = MarkdownDocumentsLoader(
-        doc_base=args.doc_base,
-        skip_patterns=args.skip_patterns,
-    )
-    batch = []
-    for doc in loader.load(limit=args.limit):
-        if len(batch) == args.batch_size:
-            insert_batch(batch, comp=args.component)
-            batch = []
-        batch.append(doc)
-
-    if len(batch) > 0:
-        insert_batch(batch, comp=args.component)
-```
-
-### 6. Start the Chat UI
-
-Execute the following command to start the chat UI:
-
-```bash
-# Use the start script
-./scripts/start.sh chat
-
-# Or run directly with uv
-uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
-```
-
-Visit the URL displayed in the terminal to open the chatbot application UI.
 
 ```bash
   You can now view your Streamlit app in your browser.
@@ -403,6 +283,14 @@ Visit the URL displayed in the terminal to open the chatbot application UI.
   Network URL: http://172.xxx.xxx.xxx:8501
   External URL: http://xxx.xxx.xxx.xxx:8501 # This is the URL you can access from your browser
 ```
+
+Visit the URL displayed in the terminal to open the chatbot application UI.
+
+After starting the program, go to the "Load Documents" page and load documents step by step. It supports compressed files, multiple markdown files, and GitHub addresses.
+
+### 5. Start the Chat UI
+
+Click the "Chat" button in the menu.
 
 ![Chat UI](./images/chatbot-ui.png)
 
@@ -422,12 +310,6 @@ uv run python src/tools/embed_docs.py --doc_base .
 
 # Or you can specify the table to insert data into
 uv run python src/tools/embed_docs.py --doc_base . --table_name my_table
-```
-
-Then you can specify the `TABLE_NAME` environment variable before launching the chat interface to specify which table the chatbot will query:
-
-```bash
-TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
 ```
 
 ### 3. How to see the SQL statements executed by the database during embedding and retrieval?

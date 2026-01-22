@@ -11,7 +11,7 @@
 该机器人将由以下几个组件组成：
 
 1. 将文档转换为向量的文本嵌入服务，在这里我们使用通义千问的嵌入 API
-2. 提供存储和查询文档向量和其他结构化数据能力的数据库，我们使用 OceanBase 4.3.3 版本
+2. 提供存储和查询文档向量和其他结构化数据能力的数据库，我们使用 OceanBase 4.3.5 版本
 3. 若干分析用户问题、基于检索到的文档和用户问题生成回答的 LLM 智能体，利用通义千问的大模型能力构建
 4. 机器人与用户交互的聊天界面，采用 Streamlit 搭建
 
@@ -51,7 +51,7 @@
 
 - 基于向量间的距离（如欧氏距离）或相似度（如余弦相似度）进行搜索
 - 通常使用近似最近邻（Approximate Nearest Neighbor, ANN）算法来提高检索效率
-- OceanBase 4.3.3 支持 HNSW 算法，这是一种高效的 ANN 算法
+- OceanBase 4.3.5 支持 HNSW 算法，这是一种高效的 ANN 算法
 - 使用 ANN 可以快速从百万甚至亿级别的向量中找到近似最相似的结果
 - 相比传统关键词搜索，向量检索能更好地理解语义相似性
 
@@ -114,7 +114,7 @@ RAG 的主要优势有：
 
 ### 1. 获取 OceanBase 数据库
 
-我们首先要获取 OceanBase 4.3.3 版本及以上的数据库来存储我们的向量数据。您可以通过以下两种方式获取 OceanBase 数据库：
+我们首先要获取 OceanBase 4.3.5 版本及以上的数据库来存储我们的向量数据。您可以通过以下两种方式获取 OceanBase 数据库：
 
 1. 使用 OB Cloud 云数据库免费试用版，平台注册和实例开通请参考[OB Cloud 云数据库 365 天免费试用](https://www.oceanbase.com/free-trial)；（推荐）
 2. 使用 Docker 启动单机版 OceanBase 数据库。（备选，需要有 Docker 环境，消耗较多本地资源）
@@ -131,11 +131,6 @@ RAG 的主要优势有：
 
 ![获取数据库连接串](./images/obcloud-get-connection.png)
 
-##### 修改参数启用向量模块
-
-进入实例详情页的“参数管理”，将 `ob_vector_memory_limit_percentage` 参数修改为 30 以启动向量模块。
-
-![修改参数以启用向量功能](./images/obcloud-modify-param.png)
 
 #### 1.2 使用 Docker 启动单机版 OceanBase 数据库
 
@@ -147,99 +142,14 @@ RAG 的主要优势有：
 systemctl start docker
 ```
 
-随后您可以使用以下命令启动一个 OceanBase docker 容器：
 
-```bash
-docker run --name=ob433 -e MODE=mini -e OB_MEMORY_LIMIT=8G -e OB_DATAFILE_SIZE=10G -e OB_CLUSTER_NAME=ailab2024 -e OB_SERVER_IP=127.0.0.1 -p 127.0.0.1:2881:2881 -d quay.io/oceanbase/oceanbase-ce:4.3.3.1-101000012024102216
-```
-
-如果上述命令执行成功，将会打印容器 ID，如下所示：
-
-```bash
-af5b32e79dc2a862b5574d05a18c1b240dc5923f04435a0e0ec41d70d91a20ee
-```
-
-##### 检查 OceanBase 数据库初始化是否完成
-
-容器启动后，您可以使用以下命令检查 OceanBase 数据库初始化状态：
-
-```bash
-docker logs -f ob433
-```
-
-初始化过程大约需要 2 ~ 3 分钟。当您看到以下消息（底部的 `boot success!` 是必须的）时，说明 OceanBase 数据库初始化完成：
-
-```bash
-cluster scenario: express_oltp
-Start observer ok
-observer program health check ok
-Connect to observer ok
-Initialize oceanbase-ce ok
-Wait for observer init ok
-+----------------------------------------------+
-|                 oceanbase-ce                 |
-+------------+---------+------+-------+--------+
-| ip         | version | port | zone  | status |
-+------------+---------+------+-------+--------+
-| 172.17.0.2 | 4.3.3.1 | 2881 | zone1 | ACTIVE |
-+------------+---------+------+-------+--------+
-obclient -h172.17.0.2 -P2881 -uroot -Doceanbase -A
-
-cluster unique id: c17ea619-5a3e-5656-be07-00022aa5b154-19298807cfb-00030304
-
-obcluster running
-
-...
-
-check tenant connectable
-tenant is connectable
-boot success!
-```
-
-使用 `Ctrl + C` 退出日志查看界面。
-
-##### 测试数据库部署情况（可选）
-
-可以使用 mysql 客户端连接到 OceanBase 集群，检查数据库部署情况。
-
-```bash
-mysql -h127.0.0.1 -P2881 -uroot@test -A -e "show databases"
-```
-
-如果部署成功，您将看到以下输出：
-
-```bash
-+--------------------+
-| Database           |
-+--------------------+
-| information_schema |
-| mysql              |
-| oceanbase          |
-| test               |
-+--------------------+
-```
-
-### 2. 安装依赖
-
+### 2. 设置环境变量
 接下来，您需要切换到动手实战营的项目目录：
 
 ```bash
-cd ~/ai-workshop-2024
+git clone https://github.com/ob-labs/ChatBot
+cd ChatBot
 ```
-
-我们使用 uv 来管理聊天机器人项目的依赖项。您可以使用以下命令安装依赖项：
-
-```bash
-uv sync
-```
-
-如果您正在使用动手实战营提供的机器，您会看到以下消息，因为依赖都已经预先安装在了机器上：
-
-```bash
-Resolved X packages in XXms
-```
-
-### 3. 设置环境变量
 
 我们准备了一个 `.env.example` 文件，其中包含了聊天机器人所需的环境变量。您可以将 `.env.example` 文件复制到 `.env` 并更新 `.env` 文件中的值。
 
@@ -249,152 +159,119 @@ cp .env.example .env
 vi .env
 ```
 
-`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用通义千问提供的 LLM 能力），您需要把 `API_KEY` 和 `OPENAI_EMBEDDING_API_KEY` 更新为您从阿里云百炼控制台获取的 API KEY 值，如果您使用 OB Cloud 的数据库实例，请将 `DB_` 开头的变量更新为您的数据库连接信息，然后保存文件。
+`.env.example` 文件的内容如下，如果您正在按照动手实战营的步骤进行操作（使用通义千问提供的 LLM 能力），您需要把 `API_KEY` 更新为您从阿里云百炼控制台获取的 API KEY 值，如果您使用 OB Cloud 的数据库实例，请将 `DB_` 开头的变量更新为您的数据库连接信息，然后保存文件。
 
 ```bash
-API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx # 填写 API Key
-LLM_MODEL="qwen-turbo-2024-11-01"
-LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-
-HF_ENDPOINT=https://hf-mirror.com
-BGE_MODEL_PATH=BAAI/bge-m3
-
-OLLAMA_URL=
-OLLAMA_TOKEN=
-
-OPENAI_EMBEDDING_API_KEY= # 填写 API Key
-OPENAI_EMBEDDING_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-OPENAI_EMBEDDING_MODEL=text-embedding-v3
 
 UI_LANG="zh"
 
-# 如果你使用的是 OB Cloud 的实例，请根据实例的连接信息更新下面的变量
+
+#######################################################################
+###################                               #####################
+###################          Model Setting        #####################
+###################                               #####################
+#######################################################################
+HF_ENDPOINT=https://hf-mirror.com
+
+### Chat model
+API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx             -----> 此处填写 刚才申请的 API Key
+LLM_MODEL="qwen3-coder-plus"
+LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# =============================================================================
+# Embedding Model Configuration
+# =============================================================================
+# EMBEDDED_TYPE: Embedding model type, available options:
+#   - default: Use built-in sentence-transformers/all-MiniLM-L6-v2 model (no additional config needed)
+#   - local_model: Use local embedding model (requires EMBEDDED_LLM_MODEL and EMBEDDED_LLM_BASE_URL)
+#   - ollama: Use Ollama embedding service (requires all three params below)
+#   - openai_embedding: Use OpenAI embedding API (requires all three params below)
+EMBEDDED_TYPE=default
+
+# Vector embedding dimension (must match your embedding model's output dimension)
+EMBEDDED_DIMENSION=384
+
+# EMBEDDED_API_KEY: API key for embedding service
+#   - Required for: ollama, openai_embedding
+#   - Not required for: default, local_model
+EMBEDDED_API_KEY=
+
+# EMBEDDED_LLM_MODEL: Embedding model name
+#   - For local_model: model name (e.g., BAAI/bge-m3)
+#   - For ollama: model name (e.g., nomic-embed-text)
+#   - For openai_embedding: model name (e.g., tongyi text-embedding-3-small)
+EMBEDDED_LLM_MODEL=
+
+# EMBEDDED_LLM_BASE_URL: Base URL or model path
+#   - For local_model: local model path (e.g., /path/to/model), if this is empty, it will be automatically downloaded
+#   - For ollama: Ollama server URL (e.g., http://localhost:11434)
+#   - For openai_embedding: OpenAI API base URL (e.g., https://api.openai.com/v1)
+EMBEDDED_LLM_BASE_URL=
+
+
+#######################################################################
+###################                               #####################
+###################          Database Setting     #####################
+###################                               #####################
+#######################################################################
+
+# Whether to reuse the current database
+# When set to true, will reuse existing database connection
+# When set to false, will start download dockers, at this time:
+#                   if DB_STORE is seekdb, DB_USER must be root
+#                   if DB_STORE is oceanbase, DB_USER must be root@test
+REUSE_CURRENT_DB=true                ---> 如果使用本地docker, 此处改为false, 如果使用刚才云山的 OceanBase, 此处填写true
+
+
+# Use what kind of docker, seekdb's docker or oceanbase-ce's docker
+# Options: seekdb, oceanbase
+# seekdb: If REUSE_CURRENT_DB is false, download seekdb docker
+# oceanbase: If REUSE_CURRENT_DB is false, download oceanbase-ce docker
+DB_STORE=seekdb            ---> 如果使用刚才云上的 OceanBase,  此处填写 oceanbase, 
+
+----> 如果使用刚才云上的 OceanBase, 此处填写 正确的数据库地址
+# Database Setting, please change as your environment. 
 DB_HOST="127.0.0.1"
 DB_PORT="2881"
-DB_USER="root@test"
+#if REUSE_CURRENT_DB=false and DB_STORE=seekdb, DB_USER must be root
+#if REUSE_CURRENT_DB=false and DB_STORE=oceanbase, DB_USER must be root@test
+DB_USER="root"
+# If database use OceanBase, the DB_USER will contain tenant's name
+# DB_USER="root@test"
+DB_PASSWORD="root@test"
 DB_NAME="test"
-DB_PASSWORD=""
+
+
+#######################################################################
+###################                               #####################
+###################         RAG Parser Setting    #####################
+###################                               #####################
+#######################################################################
+# Maximum chunk size for text splitting (in characters)
+MAX_CHUNK_SIZE=4096
+
+# Limit the number of documents to process (0 means no limit)
+LIMIT=0
+
+# Patterns to skip when processing documents (comma-separated, e.g., "*.log,*.tmp")
+SKIP_PATTERNS=""
+
+
 ```
 
-### 4. 连接数据库
-
-您可使用我们准备好的脚本来尝试连接数据库，以确保数据库相关的环境变量设置成功：
-
+### 3. 安装依赖
 ```bash
-bash scripts/connect_db.sh
-# 如果顺利进入 MySQL 连接当中，则验证了环境变量设置成功
+make init
 ```
+可能会花一些时间去下载所有的依赖, 如果使用docker 来运行 OceanBase seekdb 或 OceanBase 的话, 会花费更长的时间, 并可能需要设置国内的 docker 镜像地址. 
 
-### 5. 准备文档数据
+### 4. 准备文档数据
 
 在该步骤中，我们将克隆 OceanBase 相关组件的开源文档仓库并处理它们，生成文档的向量数据和其他结构化数据后将数据插入到我们在步骤 1 中部署好的 OceanBase 数据库。
 
-#### 5.1 克隆文档仓库
-
-首先我们将使用 git 克隆 oceanbase 的文档到本地。
-
 ```bash
-git clone --single-branch --branch V4.3.4 https://github.com/oceanbase/oceanbase-doc.git data/doc_repos/oceanbase-doc
-# 如果您访问 Github 仓库速度较慢，可以使用以下命令克隆 Gitee 的镜像版本
-git clone --single-branch --branch V4.3.4 https://gitee.com/oceanbase-devhub/oceanbase-doc.git data/doc_repos/oceanbase-doc
+make start
 ```
-
-#### 5.2 文档格式标准化
-
-因为 OceanBase 的开源文档中有些文件使用 `====` 和 `----` 来表示一级标题和二级标题，我们在这一步将其转化为标准的 `#` 和 `##` 表示。
-
-```bash
-# 把文档的标题转换为标准的 markdown 格式
-uv run python src/tools/convert_headings.py data/doc_repos/oceanbase-doc/zh-CN
-```
-
-#### 5.3 将文档转换为向量并插入 OceanBase 数据库
-
-我们提供了 `src/tools/embed_docs.py` 脚本，通过指定文档目录和对应的组件后，该脚本就会遍历目录中的所有 markdown 格式的文档，将长文档进行切片后使用嵌入模型转换为向量，并最终将文档切片的内容、嵌入的向量和切片的元信息（JSON 格式，包含文档标题、相对路径、组件名称、切片标题、级联标题）一同插入到 OceanBase 的同一张表中，作为预备数据待查。
-
-为了节省时间，我们只处理 OceanBase 众多文档中与向量检索有关的几篇文档，在第 6 步打开聊天界面之后，您针对 OceanBase 的向量检索功能进行的提问将得到较为准确的回答。
-
-```bash
-# 生成文档向量和元数据
-uv run python src/tools/embed_docs.py --doc_base data/doc_repos/oceanbase-doc/zh-CN/640.ob-vector-search
-```
-
-在等待文本处理的过程中我们可以浏览 `src/tools/embed_docs.py` 的内容，观察它是如何工作的。
-
-首先在该文件中实例化了两个对象，一个是负责将文本内容转化为向量数据的嵌入服务 `embeddings`；另一个是 OceanBase 对接的 LangChain Vector Store 服务，封装了 pyobvector 这个 OceanBase 的向量检索 SDK，为用户提供简单易用的接口方法。同时我们针对 OceanBase 组件建立了分区键，在需要定向查询某个组件的文档时能极大提升效率。
-
-```python
-embeddings = get_embedding(
-    ollama_url=os.getenv("OLLAMA_URL") or None,
-    ollama_token=os.getenv("OLLAMA_TOKEN") or None,
-    base_url=os.getenv("OPENAI_EMBEDDING_BASE_URL") or None,
-    api_key=os.getenv("OPENAI_EMBEDDING_API_KEY") or None,
-    model=os.getenv("OPENAI_EMBEDDING_MODEL") or None,
-)
-
-vs = OceanBase(
-    embedding_function=embeddings, # 传入嵌入服务，将在插入文档时即时调用
-    table_name=args.table_name,
-    connection_args=connection_args,
-    metadata_field="metadata",
-    extra_columns=[Column("component_code", Integer, primary_key=True)],
-    partitions=ObListPartition(
-        is_list_columns=False,
-        list_part_infos=[RangeListPartInfo(k, v) for k, v in cm.items()]
-        + [RangeListPartInfo("default", "DEFAULT")],
-        list_expr="component_code",
-    ),
-    echo=args.echo,
-)
-```
-
-接下来，该脚本判断所连接的 OceanBase 集群是否已开启了向量功能模块，如果没有开启则使用 SQL 命令进行启动。
-
-```python
-# 通过查询 ob_vector_memory_limit_percentage 参数判断是否已开启向量功能模块
-params = vs.obvector.perform_raw_text_sql(
-    "SHOW PARAMETERS LIKE '%ob_vector_memory_limit_percentage%'"
-)
-# ...
-
-# 通过将 ob_vector_memory_limit_percentage 参数设置为 30 来开启向量功能模块
-vs.obvector.perform_raw_text_sql(
-  "ALTER SYSTEM SET ob_vector_memory_limit_percentage = 30"
-)
-```
-
-最后，我们遍历文档目录，将文档内容读取并切片之后提交给 OceanBase Vector Store 进行嵌入和存储。
-
-```python
-if args.doc_base is not None:
-    loader = MarkdownDocumentsLoader(
-        doc_base=args.doc_base,
-        skip_patterns=args.skip_patterns,
-    )
-    batch = []
-    for doc in loader.load(limit=args.limit):
-        if len(batch) == args.batch_size:
-            insert_batch(batch, comp=args.component)
-            batch = []
-        batch.append(doc)
-
-    if len(batch) > 0:
-        insert_batch(batch, comp=args.component)
-```
-
-### 6. 启动聊天界面
-
-执行以下命令启动聊天界面：
-
-```bash
-# 使用启动脚本
-./scripts/start.sh chat
-
-# 或者直接使用 uv 运行
-uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
-```
-
-访问终端中显示的 URL 来打开聊天机器人应用界面。
 
 ```bash
   You can now view your Streamlit app in your browser.
@@ -403,6 +280,14 @@ uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
   Network URL: http://172.xxx.xxx.xxx:8501
   External URL: http://xxx.xxx.xxx.xxx:8501 # 这是您可以从浏览器访问的 URL
 ```
+访问终端中显示的 URL 来打开聊天机器人应用界面。
+
+启动程序后, 进入 “加载文档” 页面, 一步一步加载文档即可, 支持 压缩包的形式, 多个markdown 文件, github 地址。 
+
+### 5. 启动聊天界面
+
+点击菜单的对话按钮, 
+
 
 ![Chat UI](./images/chatbot-ui.png)
 
@@ -424,11 +309,6 @@ uv run python src/tools/embed_docs.py --doc_base .
 uv run python src/tools/embed_docs.py --doc_base . --table_name my_table
 ```
 
-然后您可以在启动聊天界面之前指定 `TABLE_NAME` 环境变量，来指定聊天机器人将查询哪张表：
-
-```bash
-TABLE_NAME=my_table uv run streamlit run --server.runOnSave false src/frontend/chat_ui.py
-```
 
 ### 3. 如何查看嵌入和检索过程中数据库执行的操作？
 
