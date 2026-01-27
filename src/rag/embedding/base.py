@@ -56,27 +56,6 @@ def get_embedding(config: EmbeddingConfig) -> Embeddings:
             api_key=config.api_key,
             model=config.model,
         )
-    elif config.embedded_type == EmbeddedType.LOCAL_MODEL:
-        logger.info(f"Creating local model embedding: model={config.model}")
-        try:
-            from .local_model import LocalModelEmbedding
-        except ImportError:
-            logger.error("sentence-transformers not installed")
-            raise ImportError(
-                "LOCAL_MODEL mode requires sentence-transformers. "
-                "Install with: uv add sentence-transformers"
-            )
-        
-        # Use sentence-transformers for any HuggingFace model
-        model_name = config.model or "BAAI/bge-m3"
-        cache_folder = config.base_url if config.base_url else None
-        
-        logger.info(f"Loading local model: {model_name}")
-        embedding = LocalModelEmbedding(
-            model_name=model_name,
-            cache_folder=cache_folder,
-            device="cpu",
-        )
     else:
         logger.info(f"Use default embedded model, but input parameter {config.embedded_type} is not valid")
         return None
