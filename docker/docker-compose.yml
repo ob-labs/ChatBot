@@ -11,6 +11,13 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+    depends_on:
+      seekdb:
+        condition: service_healthy
+        required: false
+      oceanbase:
+        condition: service_healthy
+        required: false
     networks:
       - chatbot-network
     healthcheck:
