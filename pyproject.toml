@@ -20,7 +20,6 @@ dependencies = [
     "langchain-oceanbase>=0.3.2",
     "python-dotenv>=1.0.1",
     "powermem>=0.4.0",
-    "sentence-transformers>=2.0.0",
 ]
 
 [build-system]
@@ -30,3 +29,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+default = true
