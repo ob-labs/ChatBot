@@ -29,7 +29,7 @@ services:
 
   # OceanBase vector database
   oceanbase:
-    image: oceanbase/oceanbase-ce:4.3.5-lts
+    image: oceanbase/oceanbase-ce:4.4.1.0-100010012025120515
     container_name: oceanbase
     profiles:
       - oceanbase
@@ -37,7 +37,6 @@ services:
     volumes:
       - ./volumes/oceanbase/data:/root/ob
       - ./volumes/oceanbase/conf:/root/.obd/cluster
-      - ./volumes/oceanbase/init.d:/root/boot/init.d
     env_file: .env
     environment:
       OB_MEMORY_LIMIT: ${OCEANBASE_MEMORY_LIMIT:-6G}
