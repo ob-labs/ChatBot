@@ -11,6 +11,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+    networks:
+      - chatbot-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -41,6 +43,8 @@ services:
       LC_ALL: C.UTF-8
     ports:
       - "${DB_PORT:-2881}:2881"
+    networks:
+      - chatbot-network
     healthcheck:
       test:
         [
@@ -68,6 +72,8 @@ services:
       REPORTER: chatbot-ai-seekdb
     ports:
       - "${DB_PORT:-2881}:2881"
+    networks:
+      - chatbot-network
     healthcheck:
       test:
         [
@@ -77,3 +83,7 @@ services:
       interval: 5s
       retries: 60
       timeout: 5s
+
+networks:
+  chatbot-network:
+    driver: bridge
