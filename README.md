@@ -112,6 +112,24 @@ Notes: If you are participating in the OceanBase AI Workshop, you can skip steps
 
 ## Building the Chatbot
 
+### Quick Start with Docker (Recommended)
+
+If you want to quickly deploy the chatbot using Docker, see [Docker Deployment Guide](./docker/README.md).
+
+```bash
+# 1. Configure environment
+cd docker
+cp .env.example .env
+vim .env  # Set your API_KEY
+
+# 2. Start with Docker Compose
+docker compose up -d
+
+# 3. Access at http://localhost:8501
+```
+
+### Manual Setup
+
 ### 1. Get an OceanBase Database
 
 First, we need to obtain an OceanBase database version 4.3.5 or above to store our vector data. You can get an OceanBase database through either of these two methods:
@@ -186,7 +204,6 @@ LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
 # =============================================================================
 # EMBEDDED_TYPE: Embedding model type, available options:
 #   - default: Use built-in sentence-transformers/all-MiniLM-L6-v2 model (no additional config needed)
-#   - local_model: Use local embedding model (requires EMBEDDED_LLM_MODEL and EMBEDDED_LLM_BASE_URL)
 #   - ollama: Use Ollama embedding service (requires all three params below)
 #   - openai_embedding: Use OpenAI embedding API (requires all three params below)
 EMBEDDED_TYPE=default
@@ -196,17 +213,15 @@ EMBEDDED_DIMENSION=384
 
 # EMBEDDED_API_KEY: API key for embedding service
 #   - Required for: ollama, openai_embedding
-#   - Not required for: default, local_model
+#   - Not required for: default
 EMBEDDED_API_KEY=
 
 # EMBEDDED_LLM_MODEL: Embedding model name
-#   - For local_model: model name (e.g., BAAI/bge-m3)
 #   - For ollama: model name (e.g., nomic-embed-text)
 #   - For openai_embedding: model name (e.g., tongyi text-embedding-3-small)
 EMBEDDED_LLM_MODEL=
 
 # EMBEDDED_LLM_BASE_URL: Base URL or model path
-#   - For local_model: local model path (e.g., /path/to/model), if this is empty, it will be automatically downloaded
 #   - For ollama: Ollama server URL (e.g., http://localhost:11434)
 #   - For openai_embedding: OpenAI API base URL (e.g., https://api.openai.com/v1)
 EMBEDDED_LLM_BASE_URL=

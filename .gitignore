@@ -7,7 +7,11 @@ data/**
 *.db
 !.gitkeep
 .DS_Store
-uv.lock
 .vscode/settings.json
 pyrightconfig.json
 TODO
+
+# docker volumes
+docker/volumes/chatbot/
+docker/volumes/seekdb/
+docker/volumes/oceanbase/

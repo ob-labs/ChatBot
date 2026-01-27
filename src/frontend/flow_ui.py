@@ -422,8 +422,6 @@ class StatusStep(StepRendererBase):
 
         if embed_config.embedded_type == EmbeddedType.DEFAULT:
             col2.write(f"**{t('flow_default_model', self._lang)}:** {DEFAULT_EMBEDDING_MODEL_NAME}")
-        elif embed_config.embedded_type == EmbeddedType.LOCAL_MODEL:
-            col2.write(f"**{t('flow_local_model', self._lang)}:** {embed_config.model or t('flow_status_not_configured', self._lang)}")
         elif embed_config.embedded_type == EmbeddedType.OLLAMA:
             # Ollama only needs model and base_url, no api_key
             col2.write(f"**Model:** {embed_config.model or t('flow_status_not_configured', self._lang)}")
@@ -543,28 +541,6 @@ class EmbeddingLLMStep(StepRendererBase):
             embed_config.dimension = dimension
             st.text_input("Dimension", value=embed_config.dimension, disabled=True)
 
-        elif new_embed_type == EmbeddedType.LOCAL_MODEL:
-            st.info(t("flow_local_embedding_info", self._lang))
-            
-            # Show disabled inputs
-            st.text_input("API Key", value="", disabled=True)
-            st.text_input("Model", value=DEFAULT_BGE_HF_REPO_ID + "(performance is lower than default, no recommend to use)", disabled=True)
-            st.text_input("Base URL", value="", disabled=True)
-            model = DEFAULT_BGE_HF_REPO_ID
-            base_url = ""
-            
-            # Dimension setting (common for all types)
-            st.markdown("---")
-            embed_config.dimension = 1024
-            dimension = st.number_input(
-                "Dimension",
-                value=embed_config.dimension,
-                min_value=128,
-                max_value=4096,
-                step=128,
-                help=t("flow_dimension_help", self._lang),
-            )
-
         elif new_embed_type == EmbeddedType.OLLAMA:
             # Ollama only requires model and base_url, no api_key needed
             st.info(t("flow_ollama_info", self._lang))
@@ -645,10 +621,7 @@ class EmbeddingLLMStep(StepRendererBase):
 
         def validate() -> bool:
             if not new_config.is_valid():
-                if new_embed_type == EmbeddedType.LOCAL_MODEL:
-                    st.error(t("flow_fill_model_name", self._lang))
-                else:
-                    st.error(t("flow_fill_all_fields", self._lang))
+                st.error(t("flow_fill_all_fields", self._lang))
                 return False
             return True
 

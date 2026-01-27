@@ -9,7 +9,6 @@ from src.common.config import (
 )
 from src.common.logger import get_logger
 
-from .bge import BGEEmbedding
 from .ollama import create_ollama_embedding
 from .openai import create_openai_embedding
 
@@ -57,14 +56,6 @@ def get_embedding(config: EmbeddingConfig) -> Embeddings:
             api_key=config.api_key,
             model=config.model,
         )
-    elif config.embedded_type == EmbeddedType.LOCAL_MODEL: 
-        ## TODO: Implement local model embedding    
-        ## from sentence_transformers import SentenceTransformer
-        ## self._model = SentenceTransformer(self.model_name, device=self.device)
-        
-        # LOCAL_MODEL: right now, in order to simply usage, directly use BGEEmbedding
-        logger.info("Creating BGE embedding")
-        embedding = BGEEmbedding()
     else:
         logger.info(f"Use default embedded model, but input parameter {config.embedded_type} is not valid")
         return None

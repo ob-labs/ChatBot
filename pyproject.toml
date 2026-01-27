@@ -20,7 +20,6 @@ dependencies = [
     "langchain-oceanbase>=0.3.2",
     "python-dotenv>=1.0.1",
     "powermem>=0.4.0",
-    "flagembedding>=1.2.0",
 ]
 
 [build-system]
@@ -31,11 +30,6 @@ build-backend = "hatchling.build"
 packages = ["src"]
 
 [[tool.uv.index]]
-name = "aliyun"
-url = "https://mirrors.aliyun.com/pypi/simple/"
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
 default = true
-
-[[tool.uv.index]]
-name = "pypi"
-url = "https://pypi.org/simple/"
-default = false

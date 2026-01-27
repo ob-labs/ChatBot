@@ -1,0 +1,47 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files (mounted as volume)
+.env
+
+# Data and logs (mounted as volumes)
+data/uploaded/*
+logs/*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Documentation
+docs/
+# Keep README.md for build
+!README.md
+
+# Docker files
+docker/
+.dockerignore
+
+# CI/CD
+.github/

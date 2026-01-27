@@ -270,7 +270,6 @@ def get_hf_endpoint() -> str:
 class EmbeddedType(str, Enum):
     """Embedding model type enumeration."""
     DEFAULT = "default"
-    LOCAL_MODEL = "local_model"
     OLLAMA = "ollama"
     OPENAI_EMBEDDING = "openai_embedding"
 
@@ -326,8 +325,6 @@ class EmbeddingConfig(BaseModel):
         """
         if self.embedded_type == EmbeddedType.DEFAULT:
             return True
-        elif self.embedded_type == EmbeddedType.LOCAL_MODEL:
-            return bool(self.model)
         elif self.embedded_type == EmbeddedType.OLLAMA:
             # Ollama requires model and base_url
             return bool(self.model and self.base_url)
@@ -344,8 +341,6 @@ class EmbeddingConfig(BaseModel):
             return False
         if self.embedded_type == EmbeddedType.DEFAULT:
             return True
-        elif self.embedded_type == EmbeddedType.LOCAL_MODEL:
-            return self.model == other.model
         elif self.embedded_type == EmbeddedType.OLLAMA:
             return self.model == other.model and self.base_url == other.base_url
         else:  # OPENAI_EMBEDDING
@@ -361,8 +356,6 @@ class EmbeddingConfig(BaseModel):
         """
         if self.embedded_type == EmbeddedType.DEFAULT:
             return hash(self.embedded_type)
-        elif self.embedded_type == EmbeddedType.LOCAL_MODEL:
-            return hash((self.embedded_type, self.model))
         elif self.embedded_type == EmbeddedType.OLLAMA:
             return hash((self.embedded_type, self.model, self.base_url))
         else:  # OPENAI_EMBEDDING

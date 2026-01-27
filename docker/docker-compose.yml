@@ -1,0 +1,95 @@
+services:
+  chatbot:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    container_name: oceanbase-chatbot
+    restart: always
+    ports:
+      - "${CHATBOT_PORT:-8501}:8501"
+    env_file: .env
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      seekdb:
+        condition: service_healthy
+        required: false
+      oceanbase:
+        condition: service_healthy
+        required: false
+    networks:
+      - chatbot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # OceanBase vector database
+  oceanbase:
+    image: oceanbase/oceanbase-ce:4.4.1.0-100010012025120515
+    container_name: oceanbase
+    profiles:
+      - oceanbase
+    restart: always
+    volumes:
+      - ./volumes/oceanbase/data:/root/ob
+      - ./volumes/oceanbase/conf:/root/.obd/cluster
+    env_file: .env
+    environment:
+      OB_MEMORY_LIMIT: ${OCEANBASE_MEMORY_LIMIT:-6G}
+      OB_SYS_PASSWORD: ${DB_PASSWORD:-root@test}
+      OB_TENANT_PASSWORD: ${DB_PASSWORD:-root@test}
+      OB_CLUSTER_NAME: chatbot
+      OB_SERVER_IP: 127.0.0.1
+      MODE: mini
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    ports:
+      - "${DB_PORT:-2881}:2881"
+    networks:
+      - chatbot-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'obclient -h127.0.0.1 -P2881 -uroot@test -p${DB_PASSWORD:-root@test} -e "SELECT 1;"',
+        ]
+      interval: 10s
+      retries: 30
+      start_period: 30s
+      timeout: 10s
+
+  # SeekDB vector database
+  seekdb:
+    image: oceanbase/seekdb:latest
+    container_name: seekdb
+    profiles:
+      - seekdb
+    restart: always
+    volumes:
+      - ./volumes/seekdb:/var/lib/oceanbase
+    env_file: .env
+    environment:
+      ROOT_PASSWORD: ${DB_PASSWORD:-root@test}
+      MEMORY_LIMIT: ${SEEKDB_MEMORY_LIMIT:-2G}
+      REPORTER: chatbot-ai-seekdb
+    ports:
+      - "${DB_PORT:-2881}:2881"
+    networks:
+      - chatbot-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'mysql -h127.0.0.1 -P2881 -uroot -p${DB_PASSWORD:-root@test} -e "SELECT 1;"',
+        ]
+      interval: 5s
+      retries: 60
+      timeout: 5s
+
+networks:
+  chatbot-network:
+    driver: bridge
